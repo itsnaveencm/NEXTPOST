@@ -1,0 +1,6 @@
+{
+  "name": "NextPost",
+  "description": "AMOLED dark-mode job and exam alert app with candidate eligibility matching for Central and State Govt recruitments, Private/MNC drives, admit cards, and saved deadlines.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

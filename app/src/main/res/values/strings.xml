@@ -1,0 +1,17 @@
+<resources>
+    <string name="app_name">NextPost</string>
+    <string name="nav_gov_jobs">Government Jobs</string>
+    <string name="nav_private_jobs">Private &amp; MNC</string>
+    <string name="nav_exam_saved">Exams &amp; Saved</string>
+    <string name="action_official_pdf">Official PDF</string>
+    <string name="action_apply_now">Apply Now ↗</string>
+    <string name="action_portal_login">Portal Login ↗</string>
+    <string name="ai_brief_title">AI BRIEF</string>
+    <string name="search_states_hint">Search 28 States &amp; 8 UTs...</string>
+    <string name="cd_back">Navigate back</string>
+    <string name="cd_bookmark_save">Save alert</string>
+    <string name="cd_bookmark_remove">Remove saved alert</string>
+    <string name="cd_search">Search</string>
+    <string name="cd_clear_search">Clear search</string>
+    <string name="cd_profile">Candidate profile &amp; eligibility</string>
+</resources>
