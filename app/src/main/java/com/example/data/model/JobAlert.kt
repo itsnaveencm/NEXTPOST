@@ -148,8 +148,13 @@ data class JobAlert(
   val orgTag: String? = null,
   val subCategoryTag: String? = null,
 ) {
+  val isRollingPortal: Boolean
+    get() = applicationEndDate == "2099-12-31"
+
   val lastDateDisplay: String
-    get() = DateWindowUtils.formatIsoToDisplay(applicationEndDate)
+    get() =
+      if (isRollingPortal) "ROLLING PORTAL"
+      else DateWindowUtils.formatIsoToDisplay(applicationEndDate)
 
   val startDateDisplay: String
     get() = DateWindowUtils.formatIsoToDisplay(applicationStartDate)
@@ -187,6 +192,7 @@ data class JobAlert(
   }
 
   fun countdownBadgeText(currentDateIso: String = DateWindowUtils.currentLocalDateIso()): String {
+    if (isRollingPortal) return "ROLLING"
     if (isUpcoming(currentDateIso)) {
       val days = daysUntilOpen(currentDateIso)
       return if (days <= 0) "OPENS SOON" else "OPENS IN ${days}D"

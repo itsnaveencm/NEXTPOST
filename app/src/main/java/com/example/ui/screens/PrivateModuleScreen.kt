@@ -67,7 +67,7 @@ import com.example.ui.viewmodel.AlertsUiState
 fun PrivateModuleScreen(
   uiState: AlertsUiState,
   onNavigateBack: () -> Unit,
-  onToggleEligibleOnly: () -> Unit,
+  onSetEligibleOnly: (Boolean) -> Unit,
   onEditProfileClick: () -> Unit,
   onDomainClick: (String) -> Unit,
   modifier: Modifier = Modifier,
@@ -89,8 +89,9 @@ fun PrivateModuleScreen(
           EligibilityStripCard(
             eligibleOnly = uiState.eligibleOnly,
             profile = uiState.candidateProfile,
-            openCount = uiState.privateOpenCount,
-            onToggleEligibleOnly = onToggleEligibleOnly,
+            allOpenCount = uiState.privateAllOpenCount,
+            eligibleOpenCount = uiState.privateEligibleOpenCount,
+            onSetEligibleOnly = onSetEligibleOnly,
             onEditProfileClick = onEditProfileClick,
           )
         }
@@ -133,6 +134,8 @@ fun PrivateDomainScreen(
   domainId: String,
   uiState: AlertsUiState,
   onNavigateBack: () -> Unit,
+  onSetEligibleOnly: (Boolean) -> Unit,
+  onEditProfileClick: () -> Unit,
   onToggleSaveCompany: (String) -> Unit,
   onCompanyClick: (String) -> Unit,
   modifier: Modifier = Modifier,
@@ -141,6 +144,8 @@ fun PrivateDomainScreen(
   val domainTitle = domain?.title ?: domainId
   val companies =
     RecruitmentHierarchy.privateCompanies.filter { domainId in it.domainIds }
+  val allOpenInDomain = domain?.let { uiState.openCountForDomain(it, eligibleOnlyOverride = false) } ?: 0
+  val eligibleOpenInDomain = domain?.let { uiState.openCountForDomain(it, eligibleOnlyOverride = true) } ?: 0
 
   Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
     Column(modifier = Modifier.widthIn(max = 780.dp).fillMaxSize()) {
@@ -158,6 +163,17 @@ fun PrivateDomainScreen(
           verticalArrangement = Arrangement.spacedBy(10.dp),
           modifier = Modifier.fillMaxSize().testTag("private_company_directory"),
         ) {
+          item(key = "domain_eligibility") {
+            EligibilityStripCard(
+              eligibleOnly = uiState.eligibleOnly,
+              profile = uiState.candidateProfile,
+              allOpenCount = allOpenInDomain,
+              eligibleOpenCount = eligibleOpenInDomain,
+              onSetEligibleOnly = onSetEligibleOnly,
+              onEditProfileClick = onEditProfileClick,
+            )
+          }
+
           item(key = "domain_companies_header") {
             GlassySectionHeader(
               eyebrow = "COMPANIES IN DOMAIN",
@@ -208,6 +224,7 @@ fun CompanyDetailScreen(
   uiState: AlertsUiState,
   onNavigateBack: () -> Unit,
   onToggleSaveCompany: (String) -> Unit,
+  onSetEligibleOnly: (Boolean) -> Unit,
   onToggleEligibleOnly: () -> Unit,
   onSelectWindowFilter: (JobWindowFilter) -> Unit,
   onEditProfileClick: () -> Unit,
@@ -222,6 +239,8 @@ fun CompanyDetailScreen(
   val company = RecruitmentHierarchy.findPrivateCompany(companyId)
   val companyTitle = company?.name ?: companyId
   val openJobs = uiState.jobsForCompany(companyId)
+  val allOpenInCompany = uiState.openJobsForCompany(companyId, eligibleOnlyOverride = false).size
+  val eligibleOpenInCompany = uiState.openJobsForCompany(companyId, eligibleOnlyOverride = true).size
   val isSaved = companyId in uiState.savedOrgIds
 
   Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
@@ -330,8 +349,9 @@ fun CompanyDetailScreen(
           EligibilityStripCard(
             eligibleOnly = uiState.eligibleOnly,
             profile = uiState.candidateProfile,
-            openCount = openJobs.size,
-            onToggleEligibleOnly = onToggleEligibleOnly,
+            allOpenCount = allOpenInCompany,
+            eligibleOpenCount = eligibleOpenInCompany,
+            onSetEligibleOnly = onSetEligibleOnly,
             onEditProfileClick = onEditProfileClick,
           )
         }

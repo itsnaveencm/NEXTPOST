@@ -36,7 +36,7 @@ import com.example.ui.viewmodel.AlertsUiState
 fun StateGovModuleScreen(
   uiState: AlertsUiState,
   onNavigateBack: () -> Unit,
-  onToggleEligibleOnly: () -> Unit,
+  onSetEligibleOnly: (Boolean) -> Unit,
   onEditProfileClick: () -> Unit,
   onStateClick: (String) -> Unit,
   modifier: Modifier = Modifier,
@@ -73,8 +73,9 @@ fun StateGovModuleScreen(
       EligibilityStripCard(
         eligibleOnly = uiState.eligibleOnly,
         profile = uiState.candidateProfile,
-        openCount = uiState.stateOpenCount,
-        onToggleEligibleOnly = onToggleEligibleOnly,
+        allOpenCount = uiState.stateAllOpenCount,
+        eligibleOpenCount = uiState.stateEligibleOpenCount,
+        onSetEligibleOnly = onSetEligibleOnly,
         onEditProfileClick = onEditProfileClick,
         modifier = Modifier.padding(bottom = 8.dp),
       )
@@ -95,6 +96,7 @@ fun StateDetailScreen(
   stateCode: String,
   uiState: AlertsUiState,
   onNavigateBack: () -> Unit,
+  onSetEligibleOnly: (Boolean) -> Unit,
   onToggleEligibleOnly: () -> Unit,
   onEditProfileClick: () -> Unit,
   onSubsectionClick: (String) -> Unit,
@@ -104,6 +106,8 @@ fun StateDetailScreen(
   val stateTitle = region?.name ?: stateCode
   val availableSubsections = uiState.availableStateSubsections(stateCode)
   val totalOpenInState = availableSubsections.firstOrNull { it.first == "STATE_LEVEL" }?.second ?: 0
+  val allOpenInState = uiState.openJobsForState(stateCode, eligibleOnlyOverride = false).size
+  val eligibleOpenInState = uiState.openJobsForState(stateCode, eligibleOnlyOverride = true).size
 
   Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
     Column(modifier = Modifier.widthIn(max = 780.dp).fillMaxSize()) {
@@ -122,8 +126,9 @@ fun StateDetailScreen(
           EligibilityStripCard(
             eligibleOnly = uiState.eligibleOnly,
             profile = uiState.candidateProfile,
-            openCount = totalOpenInState,
-            onToggleEligibleOnly = onToggleEligibleOnly,
+            allOpenCount = allOpenInState,
+            eligibleOpenCount = eligibleOpenInState,
+            onSetEligibleOnly = onSetEligibleOnly,
             onEditProfileClick = onEditProfileClick,
           )
         }

@@ -21,6 +21,7 @@ import com.example.data.model.SavedJobRecord
 import com.example.data.remote.OfficialFeedApiService
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 
 class LiveVerifiedJobRepository(
@@ -99,15 +100,11 @@ class LiveVerifiedJobRepository(
         ?: defaultFeedEndpointUrl.trim()
 
     if (targetUrl.isBlank()) {
-      cachedFeedDao.upsertSyncMetadata(
-        FeedSyncMetadataEntity(
-          endpointUrl = "",
-          lastSyncedAtMillis = System.currentTimeMillis(),
-          syncStatus = "CONNECTED_PORTALS_READY",
-          verifiedJobsCount = 0,
-          verifiedUpdatesCount = 0,
-          blockedRecordsCount = 0,
-        )
+      seedLocalVerifiedFallback(
+        nowMillis = System.currentTimeMillis(),
+        endpointUrl = "",
+        syncStatus = "LOCAL_VERIFIED_FALLBACK",
+        blockedRecordsCount = 0,
       )
       return FeedSyncResult.EndpointNotConfigured
     }
@@ -137,6 +134,23 @@ class LiveVerifiedJobRepository(
         }
       }
 
+      if (verifiedJobs.isEmpty()) {
+        val fallbackPair =
+          seedLocalVerifiedFallback(
+            nowMillis = now,
+            endpointUrl = targetUrl,
+            syncStatus = "LOCAL_VERIFIED_FALLBACK",
+            blockedRecordsCount = blockedCount,
+            overrideUpdates = verifiedUpdates.takeIf { it.isNotEmpty() },
+          )
+        return FeedSyncResult.Success(
+          verifiedJobsCount = fallbackPair.first,
+          verifiedUpdatesCount = fallbackPair.second,
+          blockedRecordsCount = blockedCount,
+          syncedAtMillis = now,
+        )
+      }
+
       cachedFeedDao.replaceVerifiedFeed(
         jobs = verifiedJobs,
         updates = verifiedUpdates,
@@ -159,19 +173,66 @@ class LiveVerifiedJobRepository(
       )
     } catch (e: Exception) {
       val message = e.localizedMessage ?: "Official feed sync failed"
+      val existingJobs = cachedFeedDao.observeCachedJobs().first()
+      val existingUpdates = cachedFeedDao.observeCachedExamUpdates().first()
       val previousMeta = cachedFeedDao.getSyncMetadataSync()
-      cachedFeedDao.upsertSyncMetadata(
-        FeedSyncMetadataEntity(
+      val now = System.currentTimeMillis()
+
+      if (existingJobs.isEmpty()) {
+        seedLocalVerifiedFallback(
+          nowMillis = now,
           endpointUrl = targetUrl,
-          lastSyncedAtMillis = previousMeta?.lastSyncedAtMillis ?: 0L,
           syncStatus = "SYNC_ERROR",
-          verifiedJobsCount = previousMeta?.verifiedJobsCount ?: 0,
-          verifiedUpdatesCount = previousMeta?.verifiedUpdatesCount ?: 0,
           blockedRecordsCount = previousMeta?.blockedRecordsCount ?: 0,
+          overrideUpdates = existingUpdates.takeIf { it.isNotEmpty() },
         )
-      )
+      } else {
+        cachedFeedDao.upsertSyncMetadata(
+          FeedSyncMetadataEntity(
+            endpointUrl = targetUrl,
+            lastSyncedAtMillis = previousMeta?.lastSyncedAtMillis ?: now,
+            syncStatus = "SYNC_ERROR",
+            verifiedJobsCount = existingJobs.size,
+            verifiedUpdatesCount = existingUpdates.size,
+            blockedRecordsCount = previousMeta?.blockedRecordsCount ?: 0,
+          )
+        )
+      }
       FeedSyncResult.Error(message)
     }
+  }
+
+  private suspend fun seedLocalVerifiedFallback(
+    nowMillis: Long,
+    endpointUrl: String,
+    syncStatus: String,
+    blockedRecordsCount: Int,
+    overrideUpdates: List<CachedExamUpdateEntity>? = null,
+  ): Pair<Int, Int> {
+    val fallbackJobs =
+      VerifiedOfficialCatalog.jobs
+        .filter { OfficialSourceVerifier.verifyJob(it).isVerified }
+        .map { CachedJobEntity.fromDomain(it, nowMillis) }
+    val fallbackUpdates =
+      overrideUpdates
+        ?: VerifiedOfficialCatalog.examUpdates
+          .filter { OfficialSourceVerifier.verifyExamUpdate(it).isVerified }
+          .map { CachedExamUpdateEntity.fromDomain(it, nowMillis) }
+
+    cachedFeedDao.replaceVerifiedFeed(
+      jobs = fallbackJobs,
+      updates = fallbackUpdates,
+      metadata =
+        FeedSyncMetadataEntity(
+          endpointUrl = endpointUrl,
+          lastSyncedAtMillis = nowMillis,
+          syncStatus = syncStatus,
+          verifiedJobsCount = fallbackJobs.size,
+          verifiedUpdatesCount = fallbackUpdates.size,
+          blockedRecordsCount = blockedRecordsCount,
+        ),
+    )
+    return fallbackJobs.size to fallbackUpdates.size
   }
 
   override fun observeSavedJobs(profileFlow: Flow<CandidateProfile>): Flow<List<SavedJobRecord>> =

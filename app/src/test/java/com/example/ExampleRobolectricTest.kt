@@ -34,13 +34,21 @@ import com.example.data.remote.OfficialFeedApiService
 import com.example.data.remote.OfficialFeedResponseDto
 import com.example.data.repository.FeedSyncResult
 import com.example.data.repository.LiveVerifiedJobRepository
+import com.example.data.repository.VerifiedOfficialCatalog
 import com.example.notifications.FeedSyncNotificationEvaluator
 import com.example.notifications.NextPostWorkScheduler
+import com.example.ui.viewmodel.AlertsViewModel
+import java.io.IOException
 import java.util.Calendar
 import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
+import kotlinx.coroutines.test.resetMain
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.test.setMain
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -438,7 +446,7 @@ class ExampleRobolectricTest {
     assertFalse(RecruitmentHierarchy.matchesOrgSubCategory(rrbNtpc, "RRB", "TECHNICIAN"))
     assertEquals(JobStatusTag.APPLIED, rrbNtpc.resolveStatusTag(isApplied = true, nowMillis = nov24Millis))
     assertEquals(8, RecruitmentHierarchy.privateDomains.size)
-    assertEquals(16, RecruitmentHierarchy.privateCompanies.size)
+    assertEquals(17, RecruitmentHierarchy.privateCompanies.size)
   }
 
   @Test
@@ -585,4 +593,119 @@ class ExampleRobolectricTest {
     assertFalse(updated.examUpdatesEnabled)
     assertEquals(setOf("job_a", "job_b"), store.seenActiveJobIdsFlow.first())
   }
+
+  @Test
+  fun `built-in verified catalog entries pass domain verification and are open on Nov 26 2026`() {
+    val nov26Iso = "2026-11-26"
+    assertEquals(11, VerifiedOfficialCatalog.jobs.size)
+    assertEquals(3, VerifiedOfficialCatalog.examUpdates.size)
+
+    VerifiedOfficialCatalog.jobs.forEach { job ->
+      assertTrue(
+        "Expected verified official source for ${job.id} (${job.officialDomain})",
+        OfficialSourceVerifier.verifyJob(job).isVerified,
+      )
+      assertTrue(
+        "Expected active application window on $nov26Iso for ${job.id}",
+        job.isApplicationOpenNow(nov26Iso),
+      )
+    }
+
+    VerifiedOfficialCatalog.examUpdates.forEach { upd ->
+      assertTrue(
+        "Expected verified exam update source for ${upd.id} (${upd.officialDomain})",
+        OfficialSourceVerifier.verifyExamUpdate(upd).isVerified,
+      )
+    }
+  }
+
+  @Test
+  fun `repository falls back to built-in verified catalog when endpoint is empty, fails, or returns zero jobs`() =
+    runTest {
+      val failingOrEmptyService =
+        object : OfficialFeedApiService {
+          var mode = "EMPTY"
+
+          override suspend fun fetchVerifiedFeed(feedUrl: String): OfficialFeedResponseDto {
+            if (mode == "THROW") throw IOException("Network timeout")
+            return OfficialFeedResponseDto(jobs = emptyList(), examUpdates = emptyList())
+          }
+        }
+
+      val repository =
+        LiveVerifiedJobRepository(
+          savedJobDao = database.savedJobDao(),
+          appliedJobDao = database.appliedJobDao(),
+          cachedFeedDao = database.cachedFeedDao(),
+          apiService = failingOrEmptyService,
+          defaultFeedEndpointUrl = "",
+        )
+
+      // 1. Empty endpoint URL -> seeds built-in verified fallback
+      assertEquals(FeedSyncResult.EndpointNotConfigured, repository.syncVerifiedFeed())
+      assertEquals(11, repository.observeAllJobs().first().size)
+      assertEquals(3, repository.observeExamUpdates().first().size)
+
+      // 2. Remote returns empty jobs array -> keeps built-in verified fallback
+      failingOrEmptyService.mode = "EMPTY"
+      val emptyResult = repository.syncVerifiedFeed("https://api.example.gov.in/empty.json")
+      assertTrue(emptyResult is FeedSyncResult.Success)
+      assertEquals(11, repository.observeAllJobs().first().size)
+
+      // 3. Remote throws network error -> falls back without wiping posts
+      failingOrEmptyService.mode = "THROW"
+      val errResult = repository.syncVerifiedFeed("https://api.example.gov.in/timeout.json")
+      assertTrue(errResult is FeedSyncResult.Error)
+      assertEquals(11, repository.observeAllJobs().first().size)
+      assertEquals("SYNC_ERROR", repository.observeSyncMetadata().first().syncStatus)
+    }
+
+  @OptIn(ExperimentalCoroutinesApi::class)
+  @Test
+  fun `viewmodel defaults to All Open when profile is unsaved and supports one-tap toggle`() =
+    runTest {
+      val mainDispatcher = UnconfinedTestDispatcher()
+      Dispatchers.setMain(mainDispatcher)
+      try {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val store = CandidateProfileStore(context)
+        val repository =
+          LiveVerifiedJobRepository(
+            savedJobDao = database.savedJobDao(),
+            appliedJobDao = database.appliedJobDao(),
+            cachedFeedDao = database.cachedFeedDao(),
+            apiService =
+              object : OfficialFeedApiService {
+                override suspend fun fetchVerifiedFeed(feedUrl: String) =
+                  OfficialFeedResponseDto(jobs = emptyList(), examUpdates = emptyList())
+              },
+            defaultFeedEndpointUrl = "",
+          )
+        repository.syncVerifiedFeed()
+
+        val viewModel =
+          AlertsViewModel(
+            repository = repository,
+            profileStore = store,
+            appContext = null,
+            currentDateProvider = { "2026-11-26" },
+          )
+
+        val initialState = viewModel.uiState.first { it.totalAllOpenCount > 0 }
+        assertFalse(initialState.eligibleOnly)
+        assertEquals(11, initialState.totalAllOpenCount)
+        assertEquals(11, initialState.displayedOpenCount)
+        assertEquals(1, initialState.govOpenCount)
+        assertEquals(6, initialState.stateOpenCount)
+        assertEquals(4, initialState.privateOpenCount)
+
+        viewModel.setEligibleOnly(true)
+        val filteredState = viewModel.uiState.first { it.eligibleOnly }
+        assertTrue(filteredState.eligibleOnly)
+        assertEquals(11, filteredState.totalAllOpenCount)
+        assertEquals(filteredState.totalOpenEligibleCount, filteredState.displayedOpenCount)
+      } finally {
+        Dispatchers.resetMain()
+      }
+    }
 }

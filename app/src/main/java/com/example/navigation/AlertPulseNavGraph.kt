@@ -154,6 +154,7 @@ fun AlertPulseApp(
         DashboardScreen(
           uiState = uiState,
           onSearchQueryChange = viewModel::updateSearchQuery,
+          onSetEligibleOnly = viewModel::setEligibleOnly,
           onToggleEligibleOnly = viewModel::toggleEligibleOnly,
           onProfileClick = { navController.navigate(CandidateProfileRoute) },
           onOpenGovModule = { navController.navigate(GovJobsModuleRoute) },
@@ -184,7 +185,7 @@ fun AlertPulseApp(
         GovJobsModuleScreen(
           uiState = uiState,
           onNavigateBack = { navController.popBackStack() },
-          onToggleEligibleOnly = viewModel::toggleEligibleOnly,
+          onSetEligibleOnly = viewModel::setEligibleOnly,
           onEditProfileClick = { navController.navigate(CandidateProfileRoute) },
           onToggleSaveOrg = viewModel::toggleSavedOrg,
           onOrgClick = { orgId -> navController.navigate(OrgDetailRoute(orgId)) },
@@ -199,7 +200,7 @@ fun AlertPulseApp(
           uiState = uiState,
           onNavigateBack = { navController.popBackStack() },
           onToggleSaveOrg = viewModel::toggleSavedOrg,
-          onToggleEligibleOnly = viewModel::toggleEligibleOnly,
+          onSetEligibleOnly = viewModel::setEligibleOnly,
           onEditProfileClick = { navController.navigate(CandidateProfileRoute) },
           onSubCategoryClick = { categoryId ->
             navController.navigate(
@@ -214,7 +215,7 @@ fun AlertPulseApp(
         StateGovModuleScreen(
           uiState = uiState,
           onNavigateBack = { navController.popBackStack() },
-          onToggleEligibleOnly = viewModel::toggleEligibleOnly,
+          onSetEligibleOnly = viewModel::setEligibleOnly,
           onEditProfileClick = { navController.navigate(CandidateProfileRoute) },
           onStateClick = { stateCode -> navController.navigate(StateDetailRoute(stateCode)) },
         )
@@ -227,6 +228,7 @@ fun AlertPulseApp(
           stateCode = route.stateCode,
           uiState = uiState,
           onNavigateBack = { navController.popBackStack() },
+          onSetEligibleOnly = viewModel::setEligibleOnly,
           onToggleEligibleOnly = viewModel::toggleEligibleOnly,
           onEditProfileClick = { navController.navigate(CandidateProfileRoute) },
           onSubsectionClick = { subId ->
@@ -242,7 +244,7 @@ fun AlertPulseApp(
         PrivateModuleScreen(
           uiState = uiState,
           onNavigateBack = { navController.popBackStack() },
-          onToggleEligibleOnly = viewModel::toggleEligibleOnly,
+          onSetEligibleOnly = viewModel::setEligibleOnly,
           onEditProfileClick = { navController.navigate(CandidateProfileRoute) },
           onDomainClick = { domainId -> navController.navigate(PrivateDomainRoute(domainId)) },
         )
@@ -255,6 +257,8 @@ fun AlertPulseApp(
           domainId = route.domainId,
           uiState = uiState,
           onNavigateBack = { navController.popBackStack() },
+          onSetEligibleOnly = viewModel::setEligibleOnly,
+          onEditProfileClick = { navController.navigate(CandidateProfileRoute) },
           onToggleSaveCompany = viewModel::toggleSavedOrg,
           onCompanyClick = { companyId ->
             navController.navigate(CompanyDetailRoute(companyId))
@@ -270,6 +274,7 @@ fun AlertPulseApp(
           uiState = uiState,
           onNavigateBack = { navController.popBackStack() },
           onToggleSaveCompany = viewModel::toggleSavedOrg,
+          onSetEligibleOnly = viewModel::setEligibleOnly,
           onToggleEligibleOnly = viewModel::toggleEligibleOnly,
           onSelectWindowFilter = viewModel::setWindowFilter,
           onEditProfileClick = { navController.navigate(CandidateProfileRoute) },
@@ -291,6 +296,7 @@ fun AlertPulseApp(
           categoryId = route.categoryId,
           uiState = uiState,
           onNavigateBack = { navController.popBackStack() },
+          onSetEligibleOnly = viewModel::setEligibleOnly,
           onToggleEligibleOnly = viewModel::toggleEligibleOnly,
           onSelectWindowFilter = viewModel::setWindowFilter,
           onEditProfileClick = { navController.navigate(CandidateProfileRoute) },
@@ -309,6 +315,8 @@ fun AlertPulseApp(
         ExamsSavedModuleScreen(
           uiState = uiState,
           onNavigateBack = { navController.popBackStack() },
+          onSetEligibleOnly = viewModel::setEligibleOnly,
+          onEditProfileClick = { navController.navigate(CandidateProfileRoute) },
           onOpenExamUpdates = { navController.navigate(ExamUpdatesHubRoute()) },
           onOpenSavedJobs = { navController.navigate(SavedJobsHubRoute) },
           onOpenMyApplications = { navController.navigate(MyApplicationsHubRoute) },

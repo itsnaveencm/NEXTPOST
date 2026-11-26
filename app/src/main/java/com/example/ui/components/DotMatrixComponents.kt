@@ -395,11 +395,13 @@ fun FeedSyncStatusBanner(
       isSyncing -> "● SYNCING OFFICIAL PORTALS..."
       syncMetadata.syncStatus == "VERIFIED_SYNC_OK" ->
         "● SYNCED $ageLabel • OFFICIAL PORTALS VERIFIED"
+      syncMetadata.syncStatus == "LOCAL_VERIFIED_FALLBACK" ->
+        "● VERIFIED PORTALS READY • ${syncMetadata.verifiedJobsCount} ACTIVE OPENINGS"
       syncMetadata.syncStatus == "SYNC_ERROR" && syncMetadata.lastSyncedAtMillis > 0L ->
         "● OFFLINE CACHE • LAST SYNCED $ageLabel"
       syncMetadata.syncStatus == "SYNC_ERROR" ->
         "● OFFLINE • AWAITING OFFICIAL PORTAL SYNC"
-      else -> "● OFFICIAL PORTALS VERIFIED • TAP TO CONNECT FEED"
+      else -> "● OFFICIAL PORTALS VERIFIED • TAP TO CONFIGURE FEED"
     }
 
   val statusColor =
@@ -430,7 +432,7 @@ fun FeedSyncStatusBanner(
         Text(
           text =
             if (syncMetadata.endpointUrl.isBlank()) {
-              "Pull down to refresh • Zero dummy records policy active"
+              "Verified gov & corporate portals active • Pull down to refresh"
             } else {
               "${syncMetadata.verifiedJobsCount} verified jobs • ${syncMetadata.blockedRecordsCount} unverified blocked"
             },
@@ -469,8 +471,9 @@ fun FeedSyncStatusBanner(
 fun EligibilityStripCard(
   eligibleOnly: Boolean,
   profile: CandidateProfile,
-  openCount: Int,
-  onToggleEligibleOnly: () -> Unit,
+  allOpenCount: Int,
+  eligibleOpenCount: Int,
+  onSetEligibleOnly: (Boolean) -> Unit,
   onEditProfileClick: () -> Unit,
   modifier: Modifier = Modifier,
 ) {
@@ -478,13 +481,13 @@ fun EligibilityStripCard(
     borderColor = if (eligibleOnly) SubtleBorderHighlight else SubtleBorder,
     modifier = modifier.fillMaxWidth().padding(horizontal = 16.dp),
   ) {
-    Row(
-      modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp),
-      horizontalArrangement = Arrangement.SpaceBetween,
-      verticalAlignment = Alignment.CenterVertically,
-    ) {
-      Column(modifier = Modifier.weight(1f).clickable(onClick = onEditProfileClick)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
+    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp)) {
+      Row(
+        modifier = Modifier.fillMaxWidth().clickable(onClick = onEditProfileClick),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+      ) {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
           Icon(
             imageVector = Icons.Rounded.Tune,
             contentDescription = null,
@@ -494,46 +497,85 @@ fun EligibilityStripCard(
           Spacer(modifier = Modifier.width(6.dp))
           Text(
             text =
-              if (eligibleOnly) {
-                "ELIGIBLE ONLY: ON • $openCount VERIFIED"
+              if (profile.hasCompletedOnboarding) {
+                "${profile.qualification.shortLabel} • ${profile.stream.shortLabel} • ${profile.age}y • ${profile.homeStateCode}"
               } else {
-                "SHOWING ALL VERIFIED • $openCount"
+                "Default: Showing All Open • Tap to Set Profile"
               },
-            style = AlertPulseTypography.BadgeMono,
-            color = if (eligibleOnly) SkyAccent else TitaniumSilver,
+            style = MaterialTheme.typography.bodySmall,
+            color = if (profile.hasCompletedOnboarding) PrimaryText else SecondaryText,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
           )
         }
-        Spacer(modifier = Modifier.height(4.dp))
+        Spacer(modifier = Modifier.width(8.dp))
         Text(
-          text = "${profile.qualification.label} • ${profile.stream.label} • ${profile.age} yrs • ${profile.homeStateCode}",
-          style = MaterialTheme.typography.bodySmall,
-          color = SecondaryText,
-          maxLines = 1,
-          overflow = TextOverflow.Ellipsis,
-        )
-      }
-
-      Spacer(modifier = Modifier.width(10.dp))
-
-      Surface(
-        color = if (eligibleOnly) SoftLavender else ElevatedCardSurfaceAlt,
-        shape = RoundedCornerShape(24.dp),
-        border = BorderStroke(1.dp, if (eligibleOnly) SoftLavender else SubtleBorder),
-        modifier =
-          Modifier.clip(RoundedCornerShape(24.dp))
-            .clickable(onClick = onToggleEligibleOnly)
-            .testTag("eligible_only_chip"),
-      ) {
-        Text(
-          text = if (eligibleOnly) "ELIGIBLE" else "ALL OPEN",
+          text = if (profile.hasCompletedOnboarding) "EDIT PROFILE" else "SET PROFILE",
           style = AlertPulseTypography.BadgeMono,
-          color = if (eligibleOnly) AmoledBlack else TitaniumSilver,
-          modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
+          color = SoftLavender,
           maxLines = 1,
         )
       }
+
+      Spacer(modifier = Modifier.height(10.dp))
+
+      Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+      ) {
+        FilterModePill(
+          label = "All Open ($allOpenCount)",
+          selected = !eligibleOnly,
+          selectedColor = SoftLavender,
+          onClick = { onSetEligibleOnly(false) },
+          testTag = "filter_all_open_pill",
+          modifier = Modifier.weight(1f),
+        )
+        FilterModePill(
+          label = "Eligible Only ($eligibleOpenCount)",
+          selected = eligibleOnly,
+          selectedColor = SkyAccent,
+          onClick = { onSetEligibleOnly(true) },
+          testTag = "filter_eligible_only_pill",
+          modifier = Modifier.weight(1f),
+        )
+      }
+    }
+  }
+}
+
+@Composable
+private fun FilterModePill(
+  label: String,
+  selected: Boolean,
+  selectedColor: Color,
+  onClick: () -> Unit,
+  testTag: String,
+  modifier: Modifier = Modifier,
+) {
+  Surface(
+    color = if (selected) selectedColor else ElevatedCardSurfaceAlt,
+    shape = RoundedCornerShape(24.dp),
+    border = BorderStroke(1.dp, if (selected) selectedColor else SubtleBorder),
+    modifier =
+      modifier
+        .minimumInteractiveComponentSize()
+        .clip(RoundedCornerShape(24.dp))
+        .clickable(onClick = onClick)
+        .testTag(testTag),
+  ) {
+    Box(
+      contentAlignment = Alignment.Center,
+      modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 10.dp),
+    ) {
+      Text(
+        text = label,
+        style = AlertPulseTypography.BadgeMono,
+        fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+        color = if (selected) AmoledBlack else TitaniumSilver,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+      )
     }
   }
 }

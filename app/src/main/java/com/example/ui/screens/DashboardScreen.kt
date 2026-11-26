@@ -69,6 +69,7 @@ import com.example.ui.viewmodel.AlertsUiState
 fun DashboardScreen(
   uiState: AlertsUiState,
   onSearchQueryChange: (String) -> Unit,
+  onSetEligibleOnly: (Boolean) -> Unit,
   onToggleEligibleOnly: () -> Unit,
   onProfileClick: () -> Unit,
   onOpenGovModule: () -> Unit,
@@ -122,8 +123,9 @@ fun DashboardScreen(
             EligibilityStripCard(
               eligibleOnly = uiState.eligibleOnly,
               profile = uiState.candidateProfile,
-              openCount = uiState.totalOpenEligibleCount,
-              onToggleEligibleOnly = onToggleEligibleOnly,
+              allOpenCount = uiState.totalAllOpenCount,
+              eligibleOpenCount = uiState.totalOpenEligibleCount,
+              onSetEligibleOnly = onSetEligibleOnly,
               onEditProfileClick = onProfileClick,
             )
           }
@@ -141,7 +143,7 @@ fun DashboardScreen(
             GlassySectionHeader(
               eyebrow = "LEVEL 1 • MAIN SECTIONS",
               title = "Recruitment Hub",
-              trailingBadge = "${uiState.totalOpenEligibleCount} OPEN",
+              trailingBadge = "${uiState.displayedOpenCount} OPEN",
             )
           }
 

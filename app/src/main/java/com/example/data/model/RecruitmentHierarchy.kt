@@ -242,7 +242,7 @@ object RecruitmentHierarchy {
         name = "TCS",
         tagline = "Tata Consultancy Services • Pan India",
         headquarters = "Mumbai / Pan India",
-        careerPortalUrl = "https://nextstep.tcs.com",
+        careerPortalUrl = "https://www.tcs.com/careers",
         domainIds = setOf("IT_SOFTWARE", "GRAD_TRAINEE"),
         subCategories =
           listOf(
@@ -260,6 +260,18 @@ object RecruitmentHierarchy {
         subCategories =
           listOf(
             RecruitmentSubCategory("ALL", "All Openings", "Active Zoho software openings"),
+          ),
+      ),
+      PrivateCompanyNode(
+        id = "INFOSYS",
+        name = "Infosys",
+        tagline = "Infosys Limited • Engineering & Graduate Hiring",
+        headquarters = "Bengaluru / Pan India",
+        careerPortalUrl = "https://www.infosys.com/careers/",
+        domainIds = setOf("IT_SOFTWARE", "GRAD_TRAINEE"),
+        subCategories =
+          listOf(
+            RecruitmentSubCategory("ALL", "All Openings", "Engineering & graduate roles"),
           ),
       ),
       PrivateCompanyNode(

@@ -40,6 +40,7 @@ fun RecruitmentCategoryScreen(
   categoryId: String,
   uiState: AlertsUiState,
   onNavigateBack: () -> Unit,
+  onSetEligibleOnly: (Boolean) -> Unit,
   onToggleEligibleOnly: () -> Unit,
   onSelectWindowFilter: (JobWindowFilter) -> Unit,
   onEditProfileClick: () -> Unit,
@@ -58,6 +59,8 @@ fun RecruitmentCategoryScreen(
   val breadcrumbs: List<String>
   val screenTitle: String
   val filteredJobs: List<JobAlertUiModel>
+  val allOpenCount: Int
+  val eligibleOpenCount: Int
 
   if (isStateParent) {
     val stateCode = parentId.removePrefix("state:")
@@ -67,6 +70,10 @@ fun RecruitmentCategoryScreen(
     breadcrumbs = listOf("Hub", "State Gov", stateName, subTitle)
     screenTitle = "$stateName • $subTitle"
     filteredJobs = uiState.jobsForStateSubsection(stateCode, categoryId, selectedTier)
+    allOpenCount =
+      uiState.openJobsForStateSubsection(stateCode, categoryId, selectedTier, eligibleOnlyOverride = false).size
+    eligibleOpenCount =
+      uiState.openJobsForStateSubsection(stateCode, categoryId, selectedTier, eligibleOnlyOverride = true).size
   } else {
     val orgId = parentId.removePrefix("org:")
     val org = RecruitmentHierarchy.findGovOrg(orgId)
@@ -76,6 +83,8 @@ fun RecruitmentCategoryScreen(
     breadcrumbs = listOf("Hub", "Gov Jobs", orgShort, subTitle)
     screenTitle = "$orgShort • $subTitle"
     filteredJobs = uiState.jobsForOrg(orgId, categoryId)
+    allOpenCount = uiState.openJobsForOrg(orgId, categoryId, eligibleOnlyOverride = false).size
+    eligibleOpenCount = uiState.openJobsForOrg(orgId, categoryId, eligibleOnlyOverride = true).size
   }
 
   val breadcrumbPrefix = breadcrumbs.joinToString(" → ")
@@ -124,8 +133,9 @@ fun RecruitmentCategoryScreen(
           EligibilityStripCard(
             eligibleOnly = uiState.eligibleOnly,
             profile = uiState.candidateProfile,
-            openCount = filteredJobs.size,
-            onToggleEligibleOnly = onToggleEligibleOnly,
+            allOpenCount = allOpenCount,
+            eligibleOpenCount = eligibleOpenCount,
+            onSetEligibleOnly = onSetEligibleOnly,
             onEditProfileClick = onEditProfileClick,
             modifier = Modifier.padding(bottom = 2.dp),
           )

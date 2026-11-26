@@ -56,6 +56,7 @@ object NextPostWorkScheduler {
     applicationEndDateIso: String,
     nowMillis: Long = System.currentTimeMillis(),
   ): List<Pair<Int, Long>> {
+    if (applicationEndDateIso == "2099-12-31") return emptyList()
     val deadlineMillis = DateWindowUtils.deadlineEndOfDayMillis(applicationEndDateIso)
       ?: return emptyList()
     return reminderOffsetsHours.mapNotNull { hours ->

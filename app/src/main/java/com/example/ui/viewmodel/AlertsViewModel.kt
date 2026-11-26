@@ -65,17 +65,25 @@ data class AlertsUiState(
   val candidateProfile: CandidateProfile = CandidateProfile(),
   val notificationPreferences: NotificationPreferences = NotificationPreferences(),
   val notificationPromptShown: Boolean = true,
-  val eligibleOnly: Boolean = true,
+  val eligibleOnly: Boolean = false,
   val windowFilter: JobWindowFilter = JobWindowFilter.ACTIVE,
   val searchQuery: String = "",
   val todayIsoDate: String = DateWindowUtils.currentLocalDateIso(),
   val syncMetadata: FeedSyncMetadata = FeedSyncMetadata(),
   val configuredFeedUrl: String = "",
   val isSyncing: Boolean = false,
+  val totalAllOpenCount: Int = 0,
   val totalOpenEligibleCount: Int = 0,
+  val displayedOpenCount: Int = 0,
   val totalUpcomingCount: Int = 0,
+  val govAllOpenCount: Int = 0,
+  val govEligibleOpenCount: Int = 0,
   val govOpenCount: Int = 0,
+  val stateAllOpenCount: Int = 0,
+  val stateEligibleOpenCount: Int = 0,
   val stateOpenCount: Int = 0,
+  val privateAllOpenCount: Int = 0,
+  val privateEligibleOpenCount: Int = 0,
   val privateOpenCount: Int = 0,
   val allCatalogJobsUi: List<JobAlertUiModel> = emptyList(),
   val openJobsUi: List<JobAlertUiModel> = emptyList(),
@@ -109,11 +117,17 @@ data class AlertsUiState(
         RecruitmentHierarchy.matchesOrgSubCategory(item.job, orgId, categoryId)
     }
 
-  fun openJobsForOrg(orgId: String, categoryId: String = "ALL"): List<JobAlertUiModel> =
-    openJobsUi.filter { item ->
-      (!eligibleOnly || item.isEligible) &&
+  fun openJobsForOrg(
+    orgId: String,
+    categoryId: String = "ALL",
+    eligibleOnlyOverride: Boolean? = null,
+  ): List<JobAlertUiModel> {
+    val applyEligible = eligibleOnlyOverride ?: eligibleOnly
+    return openJobsUi.filter { item ->
+      (!applyEligible || item.isEligible) &&
         RecruitmentHierarchy.matchesOrgSubCategory(item.job, orgId, categoryId)
     }
+  }
 
   fun jobsForStateSubsection(
     stateCode: String,
@@ -130,28 +144,38 @@ data class AlertsUiState(
           RecruitmentHierarchy.resolveStateQualTier(item.job) == tier)
     }
 
+  fun openJobsForState(
+    stateCode: String,
+    eligibleOnlyOverride: Boolean? = null,
+  ): List<JobAlertUiModel> {
+    val applyEligible = eligibleOnlyOverride ?: eligibleOnly
+    return openJobsUi.filter { item ->
+      item.job.sector == JobSector.STATE_GOVT &&
+        item.job.stateCode.equals(stateCode, ignoreCase = true) &&
+        (!applyEligible || item.isEligible)
+    }
+  }
+
   fun openJobsForStateSubsection(
     stateCode: String,
     subsectionId: String,
     tier: StateQualificationTier = StateQualificationTier.ALL,
-  ): List<JobAlertUiModel> =
-    openJobsUi.filter { item ->
+    eligibleOnlyOverride: Boolean? = null,
+  ): List<JobAlertUiModel> {
+    val applyEligible = eligibleOnlyOverride ?: eligibleOnly
+    return openJobsUi.filter { item ->
       item.job.sector == JobSector.STATE_GOVT &&
         item.job.stateCode.equals(stateCode, ignoreCase = true) &&
-        (!eligibleOnly || item.isEligible) &&
+        (!applyEligible || item.isEligible) &&
         (subsectionId == "STATE_LEVEL" ||
           RecruitmentHierarchy.resolveStateSubsection(item.job) == subsectionId) &&
         (tier == StateQualificationTier.ALL ||
           RecruitmentHierarchy.resolveStateQualTier(item.job) == tier)
     }
+  }
 
   fun availableStateSubsections(stateCode: String): List<Pair<String, Int>> {
-    val stateOpen =
-      openJobsUi.filter { item ->
-        item.job.sector == JobSector.STATE_GOVT &&
-          item.job.stateCode.equals(stateCode, ignoreCase = true) &&
-          (!eligibleOnly || item.isEligible)
-      }
+    val stateOpen = openJobsForState(stateCode)
     if (stateOpen.isEmpty()) return emptyList()
     return RecruitmentHierarchy.stateSubsections
       .map { sub ->
@@ -168,15 +192,23 @@ data class AlertsUiState(
       (!eligibleOnly || item.isEligible) && RecruitmentHierarchy.matchesCompany(item.job, companyId)
     }
 
-  fun openJobsForCompany(companyId: String): List<JobAlertUiModel> =
-    openJobsUi.filter { item ->
-      (!eligibleOnly || item.isEligible) && RecruitmentHierarchy.matchesCompany(item.job, companyId)
+  fun openJobsForCompany(
+    companyId: String,
+    eligibleOnlyOverride: Boolean? = null,
+  ): List<JobAlertUiModel> {
+    val applyEligible = eligibleOnlyOverride ?: eligibleOnly
+    return openJobsUi.filter { item ->
+      (!applyEligible || item.isEligible) && RecruitmentHierarchy.matchesCompany(item.job, companyId)
     }
+  }
 
-  fun openCountForDomain(domain: PrivateDomainNode): Int =
+  fun openCountForDomain(
+    domain: PrivateDomainNode,
+    eligibleOnlyOverride: Boolean? = null,
+  ): Int =
     RecruitmentHierarchy.privateCompanies
       .filter { domain.id in it.domainIds }
-      .sumOf { openJobsForCompany(it.id).size }
+      .sumOf { openJobsForCompany(it.id, eligibleOnlyOverride).size }
 
   fun notAppliedOpenJobs(): List<JobAlertUiModel> =
     openJobsUi.filter { item ->
@@ -193,7 +225,7 @@ class AlertsViewModel(
 
   private val applicationContext = appContext?.applicationContext
 
-  private val eligibleOnly = MutableStateFlow(true)
+  private val eligibleOnlyOverride = MutableStateFlow<Boolean?>(null)
   private val windowFilter = MutableStateFlow(JobWindowFilter.ACTIVE)
   private val searchQuery = MutableStateFlow("")
   private val isSyncing = MutableStateFlow(false)
@@ -211,8 +243,8 @@ class AlertsViewModel(
   }
 
   private val filterControlsFlow =
-    combine(eligibleOnly, windowFilter, searchQuery) { onlyEligible, filter, query ->
-      FilterBundle(onlyEligible, filter, query)
+    combine(eligibleOnlyOverride, windowFilter, searchQuery) { onlyEligibleOverride, filter, query ->
+      FilterBundle(onlyEligibleOverride, filter, query)
     }
 
   private val prefsMetaFlow =
@@ -298,15 +330,32 @@ class AlertsViewModel(
           .filter { it.job.isUpcoming(todayIso) }
           .sortedBy { it.job.startDateEpochDay() }
 
-      val activeOpenJobs =
-        if (filters.onlyEligible) openJobsUi.filter { it.isEligible } else openJobsUi
+      // Default to "All Open" until user explicitly saves a custom profile or toggles Eligible Only
+      val effectiveEligibleOnly = filters.onlyEligibleOverride ?: profile.hasCompletedOnboarding
 
-      val govOpenCount = activeOpenJobs.count { it.job.sector == JobSector.CENTRAL_GOVT }
-      val stateOpenCount = activeOpenJobs.count { it.job.sector == JobSector.STATE_GOVT }
-      val privateOpenCount =
-        activeOpenJobs.count {
+      val activeOpenJobs =
+        if (effectiveEligibleOnly) openJobsUi.filter { it.isEligible } else openJobsUi
+
+      val allGovOpenCount = openJobsUi.count { it.job.sector == JobSector.CENTRAL_GOVT }
+      val eligibleGovOpenCount =
+        openJobsUi.count { it.job.sector == JobSector.CENTRAL_GOVT && it.isEligible }
+      val allStateOpenCount = openJobsUi.count { it.job.sector == JobSector.STATE_GOVT }
+      val eligibleStateOpenCount =
+        openJobsUi.count { it.job.sector == JobSector.STATE_GOVT && it.isEligible }
+      val allPrivateOpenCount =
+        openJobsUi.count {
           it.job.sector == JobSector.PRIVATE_MNC || it.job.sector == JobSector.STATE_PRIVATE
         }
+      val eligiblePrivateOpenCount =
+        openJobsUi.count {
+          (it.job.sector == JobSector.PRIVATE_MNC || it.job.sector == JobSector.STATE_PRIVATE) &&
+            it.isEligible
+        }
+
+      val govOpenCount = if (effectiveEligibleOnly) eligibleGovOpenCount else allGovOpenCount
+      val stateOpenCount = if (effectiveEligibleOnly) eligibleStateOpenCount else allStateOpenCount
+      val privateOpenCount =
+        if (effectiveEligibleOnly) eligiblePrivateOpenCount else allPrivateOpenCount
 
       val stateCounts =
         activeOpenJobs
@@ -363,22 +412,33 @@ class AlertsViewModel(
           )
         }
 
+      val totalAllOpen = openJobsUi.size
+      val totalEligibleOpen = openJobsUi.count { it.isEligible }
+
       AlertsUiState(
         candidateProfile = profile,
         notificationPreferences = meta.notifPrefs,
         notificationPromptShown = meta.promptShown,
-        eligibleOnly = filters.onlyEligible,
+        eligibleOnly = effectiveEligibleOnly,
         windowFilter = filters.windowFilter,
         searchQuery = filters.query,
         todayIsoDate = todayIso,
         syncMetadata = records.syncMeta,
         configuredFeedUrl = meta.endpointUrl.ifBlank { records.syncMeta.endpointUrl },
         isSyncing = meta.syncing,
-        totalOpenEligibleCount = openJobsUi.count { it.isEligible },
+        totalAllOpenCount = totalAllOpen,
+        totalOpenEligibleCount = totalEligibleOpen,
+        displayedOpenCount = if (effectiveEligibleOnly) totalEligibleOpen else totalAllOpen,
         totalUpcomingCount =
-          if (filters.onlyEligible) upcomingJobsUi.count { it.isEligible } else upcomingJobsUi.size,
+          if (effectiveEligibleOnly) upcomingJobsUi.count { it.isEligible } else upcomingJobsUi.size,
+        govAllOpenCount = allGovOpenCount,
+        govEligibleOpenCount = eligibleGovOpenCount,
         govOpenCount = govOpenCount,
+        stateAllOpenCount = allStateOpenCount,
+        stateEligibleOpenCount = eligibleStateOpenCount,
         stateOpenCount = stateOpenCount,
+        privateAllOpenCount = allPrivateOpenCount,
+        privateEligibleOpenCount = eligiblePrivateOpenCount,
         privateOpenCount = privateOpenCount,
         allCatalogJobsUi = verifiedCatalogUi,
         openJobsUi = openJobsUi,
@@ -447,8 +507,12 @@ class AlertsViewModel(
     windowFilter.value = filter
   }
 
+  fun setEligibleOnly(onlyEligible: Boolean) {
+    eligibleOnlyOverride.value = onlyEligible
+  }
+
   fun toggleEligibleOnly() {
-    eligibleOnly.value = !eligibleOnly.value
+    eligibleOnlyOverride.value = !uiState.value.eligibleOnly
   }
 
   fun updateSearchQuery(query: String) {
@@ -462,6 +526,7 @@ class AlertsViewModel(
     viewModelScope.launch {
       profileStore.saveProfile(profile)
       profileStore.saveNotificationPreferences(notificationPreferences)
+      eligibleOnlyOverride.value = true
       resyncAllTrackedJobReminders()
     }
   }
@@ -631,7 +696,7 @@ class AlertsViewModel(
   }
 
   private data class FilterBundle(
-    val onlyEligible: Boolean,
+    val onlyEligibleOverride: Boolean?,
     val windowFilter: JobWindowFilter,
     val query: String,
   )

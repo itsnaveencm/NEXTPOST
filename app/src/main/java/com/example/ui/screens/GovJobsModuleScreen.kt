@@ -40,7 +40,7 @@ import com.example.ui.viewmodel.AlertsUiState
 fun GovJobsModuleScreen(
   uiState: AlertsUiState,
   onNavigateBack: () -> Unit,
-  onToggleEligibleOnly: () -> Unit,
+  onSetEligibleOnly: (Boolean) -> Unit,
   onEditProfileClick: () -> Unit,
   onToggleSaveOrg: (String) -> Unit,
   onOrgClick: (String) -> Unit,
@@ -68,8 +68,9 @@ fun GovJobsModuleScreen(
           EligibilityStripCard(
             eligibleOnly = uiState.eligibleOnly,
             profile = uiState.candidateProfile,
-            openCount = uiState.govOpenCount,
-            onToggleEligibleOnly = onToggleEligibleOnly,
+            allOpenCount = uiState.govAllOpenCount,
+            eligibleOpenCount = uiState.govEligibleOpenCount,
+            onSetEligibleOnly = onSetEligibleOnly,
             onEditProfileClick = onEditProfileClick,
             modifier = Modifier.fillMaxWidth(),
           )
@@ -160,13 +161,15 @@ fun OrgDetailScreen(
   uiState: AlertsUiState,
   onNavigateBack: () -> Unit,
   onToggleSaveOrg: (String) -> Unit,
-  onToggleEligibleOnly: () -> Unit,
+  onSetEligibleOnly: (Boolean) -> Unit,
   onEditProfileClick: () -> Unit,
   onSubCategoryClick: (String) -> Unit,
   modifier: Modifier = Modifier,
 ) {
   val org = RecruitmentHierarchy.findGovOrg(orgId)
   val totalOpen = uiState.openJobsForOrg(orgId).size
+  val allOpenInOrg = uiState.openJobsForOrg(orgId, eligibleOnlyOverride = false).size
+  val eligibleOpenInOrg = uiState.openJobsForOrg(orgId, eligibleOnlyOverride = true).size
   val isSaved = orgId in uiState.savedOrgIds
 
   Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
@@ -201,8 +204,9 @@ fun OrgDetailScreen(
             EligibilityStripCard(
               eligibleOnly = uiState.eligibleOnly,
               profile = uiState.candidateProfile,
-              openCount = totalOpen,
-              onToggleEligibleOnly = onToggleEligibleOnly,
+              allOpenCount = allOpenInOrg,
+              eligibleOpenCount = eligibleOpenInOrg,
+              onSetEligibleOnly = onSetEligibleOnly,
               onEditProfileClick = onEditProfileClick,
             )
           }

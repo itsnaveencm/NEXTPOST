@@ -37,6 +37,7 @@ import com.example.data.model.JobAlertUiModel
 import com.example.data.model.PersonalApplicationStatus
 import com.example.data.model.RecruitmentHierarchy
 import com.example.ui.components.AppliedJobBentoCard
+import com.example.ui.components.EligibilityStripCard
 import com.example.ui.components.ExamUpdateCard
 import com.example.ui.components.GlassyDirectoryRowCard
 import com.example.ui.components.GlassySectionHeader
@@ -54,6 +55,8 @@ import com.example.ui.viewmodel.AlertsUiState
 fun ExamsSavedModuleScreen(
   uiState: AlertsUiState,
   onNavigateBack: () -> Unit,
+  onSetEligibleOnly: (Boolean) -> Unit,
+  onEditProfileClick: () -> Unit,
   onOpenExamUpdates: () -> Unit,
   onOpenSavedJobs: () -> Unit,
   onOpenMyApplications: () -> Unit,
@@ -76,6 +79,18 @@ fun ExamsSavedModuleScreen(
         verticalArrangement = Arrangement.spacedBy(12.dp),
         modifier = Modifier.fillMaxSize().testTag("exams_saved_hub"),
       ) {
+        item(key = "module4_eligibility") {
+          EligibilityStripCard(
+            eligibleOnly = uiState.eligibleOnly,
+            profile = uiState.candidateProfile,
+            allOpenCount = uiState.totalAllOpenCount,
+            eligibleOpenCount = uiState.totalOpenEligibleCount,
+            onSetEligibleOnly = onSetEligibleOnly,
+            onEditProfileClick = onEditProfileClick,
+            modifier = Modifier.fillMaxWidth(),
+          )
+        }
+
         item(key = "module4_header") {
           GlassySectionHeader(
             eyebrow = "MODULE 4 • MANAGEMENT HUB",
