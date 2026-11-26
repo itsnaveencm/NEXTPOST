@@ -11,6 +11,7 @@ import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.example.data.model.AcademicStream
 import com.example.data.model.CandidateProfile
+import com.example.data.model.NotificationPreferences
 import com.example.data.model.QualificationLevel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -29,6 +30,12 @@ class CandidateProfileStore(private val context: Context) {
     val SAVED_NOTIFICATIONS = stringSetPreferencesKey("saved_notifications")
     val SAVED_ORGS = stringSetPreferencesKey("saved_orgs")
     val FEED_ENDPOINT_URL = stringPreferencesKey("feed_endpoint_url")
+    val NOTIF_ELIGIBLE_JOBS = booleanPreferencesKey("notif_eligible_jobs")
+    val NOTIF_DEADLINE_REMINDERS = booleanPreferencesKey("notif_deadline_reminders")
+    val NOTIF_EXAM_UPDATES = booleanPreferencesKey("notif_exam_updates")
+    val SEEN_ACTIVE_JOB_IDS = stringSetPreferencesKey("seen_active_job_ids")
+    val SEEN_EXAM_UPDATE_IDS = stringSetPreferencesKey("seen_exam_update_ids")
+    val NOTIFICATION_PROMPT_SHOWN = booleanPreferencesKey("notification_prompt_shown")
   }
 
   val profileFlow: Flow<CandidateProfile> =
@@ -56,6 +63,15 @@ class CandidateProfileStore(private val context: Context) {
       )
     }
 
+  val notificationPrefsFlow: Flow<NotificationPreferences> =
+    context.candidateProfileDataStore.data.map { prefs ->
+      NotificationPreferences(
+        newEligibleJobsEnabled = prefs[Keys.NOTIF_ELIGIBLE_JOBS] ?: true,
+        deadlineRemindersEnabled = prefs[Keys.NOTIF_DEADLINE_REMINDERS] ?: true,
+        examUpdatesEnabled = prefs[Keys.NOTIF_EXAM_UPDATES] ?: true,
+      )
+    }
+
   val savedNotificationIdsFlow: Flow<Set<String>> =
     context.candidateProfileDataStore.data.map { prefs ->
       prefs[Keys.SAVED_NOTIFICATIONS] ?: emptySet()
@@ -71,6 +87,21 @@ class CandidateProfileStore(private val context: Context) {
       prefs[Keys.FEED_ENDPOINT_URL] ?: ""
     }
 
+  val seenActiveJobIdsFlow: Flow<Set<String>> =
+    context.candidateProfileDataStore.data.map { prefs ->
+      prefs[Keys.SEEN_ACTIVE_JOB_IDS] ?: emptySet()
+    }
+
+  val seenExamUpdateIdsFlow: Flow<Set<String>> =
+    context.candidateProfileDataStore.data.map { prefs ->
+      prefs[Keys.SEEN_EXAM_UPDATE_IDS] ?: emptySet()
+    }
+
+  val notificationPromptShownFlow: Flow<Boolean> =
+    context.candidateProfileDataStore.data.map { prefs ->
+      prefs[Keys.NOTIFICATION_PROMPT_SHOWN] ?: false
+    }
+
   suspend fun saveProfile(profile: CandidateProfile) {
     context.candidateProfileDataStore.edit { prefs ->
       prefs[Keys.QUALIFICATION] = profile.qualification.name
@@ -81,9 +112,41 @@ class CandidateProfileStore(private val context: Context) {
     }
   }
 
+  suspend fun saveNotificationPreferences(notifPrefs: NotificationPreferences) {
+    context.candidateProfileDataStore.edit { prefs ->
+      prefs[Keys.NOTIF_ELIGIBLE_JOBS] = notifPrefs.newEligibleJobsEnabled
+      prefs[Keys.NOTIF_DEADLINE_REMINDERS] = notifPrefs.deadlineRemindersEnabled
+      prefs[Keys.NOTIF_EXAM_UPDATES] = notifPrefs.examUpdatesEnabled
+    }
+  }
+
   suspend fun saveFeedEndpointUrl(url: String) {
     context.candidateProfileDataStore.edit { prefs ->
       prefs[Keys.FEED_ENDPOINT_URL] = url.trim()
+    }
+  }
+
+  suspend fun markJobsSeen(jobIds: Collection<String>) {
+    if (jobIds.isEmpty()) return
+    context.candidateProfileDataStore.edit { prefs ->
+      val current = prefs[Keys.SEEN_ACTIVE_JOB_IDS]?.toMutableSet() ?: mutableSetOf()
+      current.addAll(jobIds)
+      prefs[Keys.SEEN_ACTIVE_JOB_IDS] = current
+    }
+  }
+
+  suspend fun markExamUpdatesSeen(updateIds: Collection<String>) {
+    if (updateIds.isEmpty()) return
+    context.candidateProfileDataStore.edit { prefs ->
+      val current = prefs[Keys.SEEN_EXAM_UPDATE_IDS]?.toMutableSet() ?: mutableSetOf()
+      current.addAll(updateIds)
+      prefs[Keys.SEEN_EXAM_UPDATE_IDS] = current
+    }
+  }
+
+  suspend fun markNotificationPromptShown() {
+    context.candidateProfileDataStore.edit { prefs ->
+      prefs[Keys.NOTIFICATION_PROMPT_SHOWN] = true
     }
   }
 

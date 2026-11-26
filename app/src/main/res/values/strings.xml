@@ -14,4 +14,6 @@
     <string name="cd_search">Search</string>
     <string name="cd_clear_search">Clear search</string>
     <string name="cd_profile">Candidate profile &amp; eligibility</string>
+    <string name="cd_share_job">Share recruitment details</string>
+    <string name="action_share">Share</string>
 </resources>

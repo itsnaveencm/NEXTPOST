@@ -22,12 +22,15 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import com.example.data.model.IndianStatesCatalog
 import com.example.data.model.JobAlertUiModel
+import com.example.data.model.JobWindowFilter
 import com.example.data.model.RecruitmentHierarchy
 import com.example.data.model.StateQualificationTier
 import com.example.ui.components.EligibilityStripCard
 import com.example.ui.components.GlassyTopBarWithBreadcrumb
 import com.example.ui.components.JobAlertCard
+import com.example.ui.components.NextPostPullToRefreshBox
 import com.example.ui.components.StadiumPill
+import com.example.ui.components.WindowFilterStrip
 import com.example.ui.components.ZeroAlertsBentoCard
 import com.example.ui.viewmodel.AlertsUiState
 
@@ -38,11 +41,13 @@ fun RecruitmentCategoryScreen(
   uiState: AlertsUiState,
   onNavigateBack: () -> Unit,
   onToggleEligibleOnly: () -> Unit,
+  onSelectWindowFilter: (JobWindowFilter) -> Unit,
   onEditProfileClick: () -> Unit,
   onToggleBookmark: (String) -> Unit,
   onMarkAppliedClick: (JobAlertUiModel) -> Unit,
   onApplyNowLaunched: (JobAlertUiModel) -> Unit,
   onOpenJobDetail: (String, String) -> Unit,
+  onRefreshFeedClick: () -> Unit = {},
   modifier: Modifier = Modifier,
 ) {
   val isStateParent = parentId.startsWith("state:")
@@ -61,7 +66,7 @@ fun RecruitmentCategoryScreen(
       RecruitmentHierarchy.stateSubsections.firstOrNull { it.id == categoryId }?.title ?: categoryId
     breadcrumbs = listOf("Hub", "State Gov", stateName, subTitle)
     screenTitle = "$stateName • $subTitle"
-    filteredJobs = uiState.openJobsForStateSubsection(stateCode, categoryId, selectedTier)
+    filteredJobs = uiState.jobsForStateSubsection(stateCode, categoryId, selectedTier)
   } else {
     val orgId = parentId.removePrefix("org:")
     val org = RecruitmentHierarchy.findGovOrg(orgId)
@@ -70,7 +75,7 @@ fun RecruitmentCategoryScreen(
       org?.subCategories?.firstOrNull { it.id == categoryId }?.title ?: categoryId
     breadcrumbs = listOf("Hub", "Gov Jobs", orgShort, subTitle)
     screenTitle = "$orgShort • $subTitle"
-    filteredJobs = uiState.openJobsForOrg(orgId, categoryId)
+    filteredJobs = uiState.jobsForOrg(orgId, categoryId)
   }
 
   val breadcrumbPrefix = breadcrumbs.joinToString(" → ")
@@ -81,6 +86,11 @@ fun RecruitmentCategoryScreen(
         title = screenTitle,
         breadcrumbs = breadcrumbs,
         onBackClick = onNavigateBack,
+      )
+
+      WindowFilterStrip(
+        selected = uiState.windowFilter,
+        onSelect = onSelectWindowFilter,
       )
 
       if (isStateParent) {
@@ -100,11 +110,16 @@ fun RecruitmentCategoryScreen(
         }
       }
 
-      LazyColumn(
-        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-        modifier = Modifier.fillMaxSize().testTag("recruitment_category_list"),
+      NextPostPullToRefreshBox(
+        isRefreshing = uiState.isSyncing,
+        onRefresh = onRefreshFeedClick,
+        modifier = Modifier.weight(1f).fillMaxWidth().testTag("recruitment_pull_to_refresh"),
       ) {
+        LazyColumn(
+          contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp),
+          verticalArrangement = Arrangement.spacedBy(12.dp),
+          modifier = Modifier.fillMaxSize().testTag("recruitment_category_list"),
+        ) {
         item(key = "cat_eligibility") {
           EligibilityStripCard(
             eligibleOnly = uiState.eligibleOnly,
@@ -119,6 +134,18 @@ fun RecruitmentCategoryScreen(
         if (filteredJobs.isEmpty()) {
           item(key = "cat_empty") {
             ZeroAlertsBentoCard(
+              headline =
+                if (uiState.windowFilter == JobWindowFilter.UPCOMING) {
+                  "NO VERIFIED UPCOMING NOTIFICATIONS"
+                } else {
+                  "NO VERIFIED ACTIVE OPENINGS"
+                },
+              subtitle =
+                if (uiState.windowFilter == JobWindowFilter.UPCOMING) {
+                  "No verified upcoming openings scheduled yet — Connected to official portals"
+                } else {
+                  "No verified active openings right now — Connected to official portals"
+                },
               onEditProfileClick = onEditProfileClick,
               secondaryActionLabel = if (uiState.eligibleOnly) "Show All Open" else null,
               onSecondaryActionClick = if (uiState.eligibleOnly) onToggleEligibleOnly else null,
@@ -138,6 +165,7 @@ fun RecruitmentCategoryScreen(
               onCardClick = { onOpenJobDetail(item.job.id, breadcrumbPrefix) },
             )
           }
+        }
         }
       }
     }

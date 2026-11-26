@@ -47,6 +47,8 @@ data class JobAlertDto(
   val salaryPayScale: String = "As per Official Notification",
   val examDateDisplay: String = "Not Announced",
   val experienceRequired: String = "Freshers Eligible",
+  val generalObcFee: String? = null,
+  val scStFemaleFee: String? = null,
   val orgTag: String? = null,
   val subCategoryTag: String? = null,
 ) {
@@ -101,6 +103,8 @@ data class JobAlertDto(
       salaryPayScale = salaryPayScale,
       examDateDisplay = examDateDisplay.ifBlank { "Not Announced" },
       experienceRequired = experienceRequired,
+      generalObcFee = generalObcFee?.takeIf { it.isNotBlank() },
+      scStFemaleFee = scStFemaleFee?.takeIf { it.isNotBlank() },
       orgTag = orgTag,
       subCategoryTag = subCategoryTag,
     )

@@ -21,6 +21,9 @@ interface CachedFeedDao {
   @Query("SELECT * FROM feed_sync_metadata WHERE id = 'main_sync' LIMIT 1")
   fun observeSyncMetadata(): Flow<FeedSyncMetadataEntity?>
 
+  @Query("SELECT * FROM feed_sync_metadata WHERE id = 'main_sync' LIMIT 1")
+  suspend fun getSyncMetadataSync(): FeedSyncMetadataEntity?
+
   @Query("DELETE FROM cached_jobs")
   suspend fun clearCachedJobs()
 

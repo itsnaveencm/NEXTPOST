@@ -1,5 +1,10 @@
 package com.example.navigation
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -12,11 +17,14 @@ import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -27,6 +35,7 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
 import com.example.data.model.AppliedJobRecord
 import com.example.data.model.JobAlertUiModel
+import com.example.ui.components.FeedEndpointDialog
 import com.example.ui.components.MarkAppliedDialog
 import com.example.ui.screens.CandidateProfileScreen
 import com.example.ui.screens.CompanyDetailScreen
@@ -49,13 +58,63 @@ import com.example.ui.theme.AmoledBlack
 import com.example.ui.viewmodel.AlertsViewModel
 
 @Composable
-fun AlertPulseApp(viewModel: AlertsViewModel) {
+fun AlertPulseApp(
+  viewModel: AlertsViewModel,
+  deepLinkJobId: String? = null,
+  onConsumeDeepLinkJob: () -> Unit = {},
+  deepLinkUpdateId: String? = null,
+  onConsumeDeepLinkUpdate: () -> Unit = {},
+) {
+  val context = LocalContext.current
   val navController = rememberNavController()
   val uiState by viewModel.uiState.collectAsStateWithLifecycle()
   val lifecycleOwner = LocalLifecycleOwner.current
 
   var manualMarkTarget by remember { mutableStateOf<JobAlertUiModel?>(null) }
   var editingAppliedRecord by remember { mutableStateOf<AppliedJobRecord?>(null) }
+  var showFeedEndpointDialog by remember { mutableStateOf(false) }
+
+  val notificationPermissionLauncher =
+    rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { _ -> }
+
+  LaunchedEffect(uiState.notificationPromptShown) {
+    if (!uiState.notificationPromptShown) {
+      viewModel.markNotificationPromptShown()
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        val granted =
+          ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) ==
+            PackageManager.PERMISSION_GRANTED
+        if (!granted) {
+          notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
+      }
+    }
+  }
+
+  LaunchedEffect(deepLinkJobId) {
+    if (!deepLinkJobId.isNullOrBlank()) {
+      navController.navigate(
+        JobDetailRoute(jobId = deepLinkJobId, breadcrumbPrefix = "Hub → Notification")
+      ) {
+        launchSingleTop = true
+      }
+      onConsumeDeepLinkJob()
+    }
+  }
+
+  LaunchedEffect(deepLinkUpdateId) {
+    if (!deepLinkUpdateId.isNullOrBlank()) {
+      navController.navigate(
+        ExamUpdateDetailRoute(
+          updateId = deepLinkUpdateId,
+          breadcrumbPrefix = "Hub → Notification",
+        )
+      ) {
+        launchSingleTop = true
+      }
+      onConsumeDeepLinkUpdate()
+    }
+  }
 
   DisposableEffect(lifecycleOwner) {
     val observer = LifecycleEventObserver { _, event ->
@@ -115,6 +174,8 @@ fun AlertPulseApp(viewModel: AlertsViewModel) {
             )
           },
           onOpenMyApplicationsHub = { navController.navigate(MyApplicationsHubRoute) },
+          onRefreshFeedClick = { viewModel.refreshVerifiedFeed() },
+          onConfigureFeedClick = { showFeedEndpointDialog = true },
         )
       }
 
@@ -210,6 +271,7 @@ fun AlertPulseApp(viewModel: AlertsViewModel) {
           onNavigateBack = { navController.popBackStack() },
           onToggleSaveCompany = viewModel::toggleSavedOrg,
           onToggleEligibleOnly = viewModel::toggleEligibleOnly,
+          onSelectWindowFilter = viewModel::setWindowFilter,
           onEditProfileClick = { navController.navigate(CandidateProfileRoute) },
           onToggleBookmark = viewModel::toggleBookmark,
           onMarkAppliedClick = { item -> manualMarkTarget = item },
@@ -217,6 +279,7 @@ fun AlertPulseApp(viewModel: AlertsViewModel) {
           onOpenJobDetail = { jobId, prefix ->
             navController.navigate(JobDetailRoute(jobId = jobId, breadcrumbPrefix = prefix))
           },
+          onRefreshFeedClick = { viewModel.refreshVerifiedFeed() },
         )
       }
 
@@ -229,6 +292,7 @@ fun AlertPulseApp(viewModel: AlertsViewModel) {
           uiState = uiState,
           onNavigateBack = { navController.popBackStack() },
           onToggleEligibleOnly = viewModel::toggleEligibleOnly,
+          onSelectWindowFilter = viewModel::setWindowFilter,
           onEditProfileClick = { navController.navigate(CandidateProfileRoute) },
           onToggleBookmark = viewModel::toggleBookmark,
           onMarkAppliedClick = { item -> manualMarkTarget = item },
@@ -236,6 +300,7 @@ fun AlertPulseApp(viewModel: AlertsViewModel) {
           onOpenJobDetail = { jobId, prefix ->
             navController.navigate(JobDetailRoute(jobId = jobId, breadcrumbPrefix = prefix))
           },
+          onRefreshFeedClick = { viewModel.refreshVerifiedFeed() },
         )
       }
 
@@ -267,6 +332,7 @@ fun AlertPulseApp(viewModel: AlertsViewModel) {
               )
             )
           },
+          onRefreshFeedClick = { viewModel.refreshVerifiedFeed() },
         )
       }
 
@@ -381,8 +447,9 @@ fun AlertPulseApp(viewModel: AlertsViewModel) {
       composable<CandidateProfileRoute> {
         CandidateProfileScreen(
           currentProfile = uiState.candidateProfile,
-          onSavePreferences = { updatedProfile ->
-            viewModel.saveCandidateProfile(updatedProfile)
+          currentNotificationPrefs = uiState.notificationPreferences,
+          onSavePreferences = { updatedProfile, updatedNotifPrefs ->
+            viewModel.saveCandidateProfile(updatedProfile, updatedNotifPrefs)
             navController.popBackStack()
           },
           onNavigateBack = { navController.popBackStack() },
@@ -444,6 +511,17 @@ fun AlertPulseApp(viewModel: AlertsViewModel) {
         editingAppliedRecord = null
       },
       onDismiss = { editingAppliedRecord = null },
+    )
+  }
+
+  if (showFeedEndpointDialog) {
+    FeedEndpointDialog(
+      currentUrl = uiState.configuredFeedUrl,
+      onSaveAndSync = { url ->
+        viewModel.saveFeedEndpointAndSync(url)
+        showFeedEndpointDialog = false
+      },
+      onDismiss = { showFeedEndpointDialog = false },
     )
   }
 }

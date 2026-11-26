@@ -43,10 +43,12 @@ import com.example.data.model.JobAlertUiModel
 import com.example.ui.components.ApplicationOpenBadge
 import com.example.ui.components.DotMatrixCountdownBadge
 import com.example.ui.components.EligibilityStripCard
+import com.example.ui.components.FeedSyncStatusBanner
 import com.example.ui.components.FloatingSearchPill
 import com.example.ui.components.GlassyCard
 import com.example.ui.components.GlassyDirectoryRowCard
 import com.example.ui.components.GlassySectionHeader
+import com.example.ui.components.NextPostPullToRefreshBox
 import com.example.ui.components.NextPostTopBar
 import com.example.ui.components.ZeroAlertsBentoCard
 import com.example.ui.theme.AlertPulseTypography
@@ -79,6 +81,8 @@ fun DashboardScreen(
   onOpenJobDetail: (String, String) -> Unit,
   onOpenExamUpdateDetail: (String, String) -> Unit,
   onOpenMyApplicationsHub: () -> Unit,
+  onRefreshFeedClick: () -> Unit,
+  onConfigureFeedClick: () -> Unit,
   modifier: Modifier = Modifier,
 ) {
   val isSearching = uiState.searchQuery.isNotBlank()
@@ -104,11 +108,16 @@ fun DashboardScreen(
           onClearSearch = { onSearchQueryChange("") },
         )
       } else {
-        LazyColumn(
-          contentPadding = PaddingValues(top = 4.dp, bottom = 28.dp),
-          verticalArrangement = Arrangement.spacedBy(12.dp),
-          modifier = Modifier.fillMaxSize().testTag("dashboard_list"),
+        NextPostPullToRefreshBox(
+          isRefreshing = uiState.isSyncing,
+          onRefresh = onRefreshFeedClick,
+          modifier = Modifier.weight(1f).fillMaxWidth().testTag("dashboard_pull_to_refresh"),
         ) {
+          LazyColumn(
+            contentPadding = PaddingValues(top = 4.dp, bottom = 28.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            modifier = Modifier.fillMaxSize().testTag("dashboard_list"),
+          ) {
           item(key = "eligibility_strip") {
             EligibilityStripCard(
               eligibleOnly = uiState.eligibleOnly,
@@ -116,6 +125,15 @@ fun DashboardScreen(
               openCount = uiState.totalOpenEligibleCount,
               onToggleEligibleOnly = onToggleEligibleOnly,
               onEditProfileClick = onProfileClick,
+            )
+          }
+
+          item(key = "feed_sync_status") {
+            FeedSyncStatusBanner(
+              syncMetadata = uiState.syncMetadata,
+              isSyncing = uiState.isSyncing,
+              onRefreshClick = onRefreshFeedClick,
+              onConfigureClick = onConfigureFeedClick,
             )
           }
 
@@ -252,6 +270,7 @@ fun DashboardScreen(
               )
             }
           }
+        }
         }
       }
     }

@@ -197,3 +197,111 @@ fun MarkAppliedDialog(
     }
   }
 }
+
+@Composable
+fun FeedEndpointDialog(
+  currentUrl: String,
+  onSaveAndSync: (String) -> Unit,
+  onDismiss: () -> Unit,
+) {
+  var endpointInput by remember(currentUrl) { mutableStateOf(currentUrl) }
+
+  Dialog(onDismissRequest = onDismiss) {
+    Surface(
+      color = ElevatedCardSurface,
+      shape = RoundedCornerShape(20.dp),
+      border = BorderStroke(1.dp, SubtleBorder),
+      modifier = Modifier.fillMaxWidth().testTag("feed_endpoint_dialog"),
+    ) {
+      Column(modifier = Modifier.padding(20.dp)) {
+        Text(
+          text = "OFFICIAL FEED ENDPOINT",
+          style = AlertPulseTypography.SectionHeaderMono,
+          color = SoftLavender,
+        )
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        Text(
+          text =
+            "Connect a verified HTTPS JSON feed endpoint. Records without official .gov.in / .nic.in / verified corporate domains are automatically blocked.",
+          style = MaterialTheme.typography.bodySmall,
+          color = SecondaryText,
+        )
+
+        Spacer(modifier = Modifier.height(14.dp))
+
+        OutlinedTextField(
+          value = endpointInput,
+          onValueChange = { endpointInput = it },
+          label = {
+            Text(
+              text = "Verified Feed JSON URL",
+              style = MaterialTheme.typography.bodySmall,
+            )
+          },
+          placeholder = {
+            Text(
+              text = "https://your-verified-feed.example.com/feed.json",
+              style = AlertPulseTypography.DateMono,
+              color = SecondaryText,
+            )
+          },
+          singleLine = true,
+          textStyle = AlertPulseTypography.DateMono.copy(color = PrimaryText),
+          shape = RoundedCornerShape(14.dp),
+          colors =
+            OutlinedTextFieldDefaults.colors(
+              focusedBorderColor = SoftLavender,
+              unfocusedBorderColor = SubtleBorder,
+              focusedContainerColor = ElevatedBarSurface,
+              unfocusedContainerColor = ElevatedBarSurface,
+              focusedLabelColor = SoftLavender,
+              unfocusedLabelColor = SecondaryText,
+              cursorColor = SoftLavender,
+            ),
+          modifier = Modifier.fillMaxWidth().testTag("feed_endpoint_input"),
+        )
+
+        Spacer(modifier = Modifier.height(18.dp))
+
+        Row(
+          modifier = Modifier.fillMaxWidth(),
+          horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+          OutlinedButton(
+            onClick = onDismiss,
+            shape = RoundedCornerShape(24.dp),
+            border = BorderStroke(1.dp, SubtleBorder),
+            colors =
+              ButtonDefaults.outlinedButtonColors(
+                containerColor = ElevatedBarSurface,
+                contentColor = TitaniumSilver,
+              ),
+            modifier = Modifier.weight(1f).height(42.dp),
+          ) {
+            Text(text = "Cancel", style = MaterialTheme.typography.labelLarge, maxLines = 1)
+          }
+
+          Button(
+            onClick = { onSaveAndSync(endpointInput.trim()) },
+            shape = RoundedCornerShape(24.dp),
+            colors =
+              ButtonDefaults.buttonColors(
+                containerColor = SoftLavender,
+                contentColor = AmoledBlack,
+              ),
+            modifier = Modifier.weight(1f).height(42.dp).testTag("dialog_save_feed_button"),
+          ) {
+            Text(
+              text = "Save & Sync",
+              style = MaterialTheme.typography.labelLarge,
+              fontWeight = FontWeight.Bold,
+              maxLines = 1,
+            )
+          }
+        }
+      }
+    }
+  }
+}

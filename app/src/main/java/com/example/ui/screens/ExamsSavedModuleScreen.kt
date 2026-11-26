@@ -42,6 +42,7 @@ import com.example.ui.components.GlassyDirectoryRowCard
 import com.example.ui.components.GlassySectionHeader
 import com.example.ui.components.GlassyTopBarWithBreadcrumb
 import com.example.ui.components.JobAlertCard
+import com.example.ui.components.NextPostPullToRefreshBox
 import com.example.ui.components.StadiumPill
 import com.example.ui.components.ZeroAlertsBentoCard
 import com.example.ui.theme.SkyAccent
@@ -157,6 +158,7 @@ fun ExamUpdatesHubScreen(
   onNavigateBack: () -> Unit,
   onToggleSavedNotice: (String) -> Unit,
   onOpenUpdateDetail: (String) -> Unit,
+  onRefreshFeedClick: () -> Unit = {},
   modifier: Modifier = Modifier,
 ) {
   var selectedFilter by rememberSaveable(initialTypeName) {
@@ -194,26 +196,35 @@ fun ExamUpdatesHubScreen(
         }
       }
 
-      if (filteredUpdates.isEmpty()) {
-        ZeroAlertsBentoCard(
-          headline = "NO UPDATES IN THIS CATEGORY",
-          subtitle = "No active exam updates matched ${selectedFilter.label}.",
-          secondaryActionLabel = if (selectedFilter != ExamUpdatesFilterChip.ALL) "Show All Updates" else null,
-          onSecondaryActionClick = { selectedFilter = ExamUpdatesFilterChip.ALL },
-        )
-      } else {
+      NextPostPullToRefreshBox(
+        isRefreshing = uiState.isSyncing,
+        onRefresh = onRefreshFeedClick,
+        modifier = Modifier.weight(1f).fillMaxWidth().testTag("exam_updates_pull_to_refresh"),
+      ) {
         LazyColumn(
           contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
           verticalArrangement = Arrangement.spacedBy(12.dp),
           modifier = Modifier.fillMaxSize().testTag("exam_updates_hub_list"),
         ) {
-          items(filteredUpdates, key = { it.id }) { update ->
-            ExamUpdateCard(
-              update = update,
-              isSaved = update.id in uiState.savedNotificationIds,
-              onToggleSaved = { onToggleSavedNotice(update.id) },
-              onCardClick = { onOpenUpdateDetail(update.id) },
-            )
+          if (filteredUpdates.isEmpty()) {
+            item(key = "updates_empty") {
+              ZeroAlertsBentoCard(
+                headline = "NO UPDATES IN THIS CATEGORY",
+                subtitle = "No active exam updates matched ${selectedFilter.label}.",
+                secondaryActionLabel =
+                  if (selectedFilter != ExamUpdatesFilterChip.ALL) "Show All Updates" else null,
+                onSecondaryActionClick = { selectedFilter = ExamUpdatesFilterChip.ALL },
+              )
+            }
+          } else {
+            items(filteredUpdates, key = { it.id }) { update ->
+              ExamUpdateCard(
+                update = update,
+                isSaved = update.id in uiState.savedNotificationIds,
+                onToggleSaved = { onToggleSavedNotice(update.id) },
+                onCardClick = { onOpenUpdateDetail(update.id) },
+              )
+            }
           }
         }
       }

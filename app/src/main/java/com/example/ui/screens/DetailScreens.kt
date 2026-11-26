@@ -32,6 +32,7 @@ import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.material.icons.rounded.KeyboardArrowUp
 import androidx.compose.material.icons.rounded.OpenInNew
+import androidx.compose.material.icons.rounded.Share
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.HorizontalDivider
@@ -57,10 +58,12 @@ import androidx.compose.ui.unit.dp
 import com.example.data.model.ExamUpdateType
 import com.example.data.model.JobAlertUiModel
 import com.example.data.model.JobStatusTag
+import com.example.data.model.OfficialSourceVerifier
 import com.example.ui.components.BrowserLauncher
 import com.example.ui.components.DotMatrixCountdownBadge
 import com.example.ui.components.GlassyCard
 import com.example.ui.components.GlassyTopBarWithBreadcrumb
+import com.example.ui.components.VerifiedSourceBadge
 import com.example.ui.components.ZeroAlertsBentoCard
 import com.example.ui.theme.AlertPulseTypography
 import com.example.ui.theme.AmoledBlack
@@ -115,17 +118,35 @@ fun JobDetailScreen(
         title = item?.job?.organization ?: "Recruitment Details",
         breadcrumbs = prefixList + (item?.job?.postTitle ?: jobId),
         onBackClick = onNavigateBack,
+        trailingContent = {
+          if (item != null) {
+            IconButton(
+              onClick = { BrowserLauncher.shareJobSummary(context, item.job) },
+              modifier =
+                Modifier.minimumInteractiveComponentSize().testTag("detail_topbar_share_btn"),
+            ) {
+              Icon(
+                imageVector = Icons.Rounded.Share,
+                contentDescription = "Share recruitment details",
+                tint = SkyAccent,
+              )
+            }
+          }
+        },
       )
 
       if (item == null) {
         ZeroAlertsBentoCard()
       } else {
         val job = item.job
+        val isOpenNow = job.isApplicationOpenNow()
+        val isSourceVerified = item.isSourceVerified
         val statusTag = job.resolveStatusTag(isApplied = item.isApplied)
         val (statusBg, statusFg) =
           when (statusTag) {
             JobStatusTag.ACTIVE -> EmeraldContainer to EmeraldSoft
             JobStatusTag.CLOSING_SOON -> StatusAmberContainer to StatusAmber
+            JobStatusTag.UPCOMING -> LavenderBadgeContainer to SoftLavender
             JobStatusTag.EXPIRED -> StatusRedContainer to StatusRed
             JobStatusTag.APPLIED -> StatusBlueContainer to StatusBlue
           }
@@ -166,6 +187,11 @@ fun JobDetailScreen(
               }
 
               Spacer(modifier = Modifier.height(10.dp))
+              VerifiedSourceBadge(
+                officialDomain = job.officialDomain,
+                isVerified = isSourceVerified,
+              )
+              Spacer(modifier = Modifier.height(8.dp))
               Text(
                 text = job.organization,
                 style = MaterialTheme.typography.labelLarge,
@@ -211,6 +237,62 @@ fun JobDetailScreen(
               DetailKeyValueRow("AGE LIMIT", job.aiBrief.ageLimit)
               Spacer(modifier = Modifier.height(8.dp))
               DetailKeyValueRow("SALARY / PAY SCALE", job.salaryPayScale)
+              Spacer(modifier = Modifier.height(12.dp))
+              HorizontalDivider(color = SubtleBorder, thickness = 1.dp)
+              Spacer(modifier = Modifier.height(12.dp))
+              Text(
+                text = "APPLICATION FEE BREAKDOWN",
+                style = AlertPulseTypography.BadgeMono,
+                color = SoftLavender,
+              )
+              Spacer(modifier = Modifier.height(8.dp))
+              Row(
+                modifier = Modifier.fillMaxWidth().testTag("detail_fee_breakdown_row"),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+              ) {
+                Surface(
+                  color = ElevatedCardSurfaceAlt,
+                  shape = RoundedCornerShape(12.dp),
+                  border = BorderStroke(1.dp, SubtleBorder),
+                  modifier = Modifier.weight(1f),
+                ) {
+                  Column(modifier = Modifier.padding(10.dp)) {
+                    Text(
+                      text = "GENERAL / OBC",
+                      style = AlertPulseTypography.BadgeMono,
+                      color = MutedText,
+                    )
+                    Spacer(modifier = Modifier.height(3.dp))
+                    Text(
+                      text = job.generalObcFee?.takeIf { it.isNotBlank() } ?: "Refer Official PDF",
+                      style = MaterialTheme.typography.bodyMedium,
+                      fontWeight = FontWeight.SemiBold,
+                      color = PrimaryText,
+                    )
+                  }
+                }
+                Surface(
+                  color = ElevatedCardSurfaceAlt,
+                  shape = RoundedCornerShape(12.dp),
+                  border = BorderStroke(1.dp, SubtleBorder),
+                  modifier = Modifier.weight(1f),
+                ) {
+                  Column(modifier = Modifier.padding(10.dp)) {
+                    Text(
+                      text = "SC / ST / PWBD / FEMALE",
+                      style = AlertPulseTypography.BadgeMono,
+                      color = MutedText,
+                    )
+                    Spacer(modifier = Modifier.height(3.dp))
+                    Text(
+                      text = job.scStFemaleFee?.takeIf { it.isNotBlank() } ?: "Refer Official PDF",
+                      style = MaterialTheme.typography.bodyMedium,
+                      fontWeight = FontWeight.SemiBold,
+                      color = PrimaryText,
+                    )
+                  }
+                }
+              }
             }
           }
 
@@ -228,6 +310,11 @@ fun JobDetailScreen(
               DetailKeyValueRow("LAST DATE TO APPLY", job.lastDateDisplay)
               Spacer(modifier = Modifier.height(8.dp))
               DetailKeyValueRow("EXAM DATE", job.examDateDisplay.ifBlank { "Not Announced" })
+              Spacer(modifier = Modifier.height(8.dp))
+              DetailKeyValueRow(
+                "LAST VERIFIED",
+                job.lastVerifiedTimestamp.ifBlank { "Verified via Official Portal" },
+              )
             }
           }
 
@@ -297,7 +384,10 @@ fun JobDetailScreen(
               verticalAlignment = Alignment.CenterVertically,
             ) {
               OutlinedButton(
-                onClick = { BrowserLauncher.openOfficialUrl(context, job.officialPdfUrl) },
+                onClick = {
+                  if (isSourceVerified) BrowserLauncher.openOfficialUrl(context, job.officialPdfUrl)
+                },
+                enabled = isSourceVerified,
                 shape = RoundedCornerShape(24.dp),
                 border = BorderStroke(1.dp, SubtleBorder),
                 colors =
@@ -331,6 +421,18 @@ fun JobDetailScreen(
               }
 
               IconButton(
+                onClick = { BrowserLauncher.shareJobSummary(context, job) },
+                modifier =
+                  Modifier.minimumInteractiveComponentSize().testTag("detail_share_btn"),
+              ) {
+                Icon(
+                  imageVector = Icons.Rounded.Share,
+                  contentDescription = "Share recruitment details",
+                  tint = SkyAccent,
+                )
+              }
+
+              IconButton(
                 onClick = { onMarkAppliedClick(item) },
                 modifier =
                   Modifier.minimumInteractiveComponentSize().testTag("detail_mark_applied_btn"),
@@ -348,6 +450,7 @@ fun JobDetailScreen(
                   onApplyNowLaunched(item)
                   BrowserLauncher.openOfficialUrl(context, job.directApplyUrl)
                 },
+                enabled = isOpenNow && isSourceVerified,
                 shape = RoundedCornerShape(24.dp),
                 colors =
                   ButtonDefaults.buttonColors(
@@ -358,17 +461,25 @@ fun JobDetailScreen(
                 modifier = Modifier.weight(1f).height(44.dp).testTag("detail_apply_btn"),
               ) {
                 Text(
-                  text = "Apply Now ↗",
+                  text =
+                    when {
+                      !isSourceVerified -> "Source Blocked"
+                      statusTag == JobStatusTag.UPCOMING -> "Opens ${job.startDateDisplay}"
+                      !isOpenNow -> "Window Closed"
+                      else -> "Apply Now ↗"
+                    },
                   style = MaterialTheme.typography.labelLarge,
                   fontWeight = FontWeight.Bold,
                   maxLines = 1,
                 )
-                Spacer(modifier = Modifier.width(4.dp))
-                Icon(
-                  imageVector = Icons.Rounded.OpenInNew,
-                  contentDescription = null,
-                  modifier = Modifier.size(14.dp),
-                )
+                if (isOpenNow && isSourceVerified) {
+                  Spacer(modifier = Modifier.width(4.dp))
+                  Icon(
+                    imageVector = Icons.Rounded.OpenInNew,
+                    contentDescription = null,
+                    modifier = Modifier.size(14.dp),
+                  )
+                }
               }
             }
           }
@@ -419,6 +530,7 @@ fun ExamUpdateDetailScreen(
       if (update == null) {
         ZeroAlertsBentoCard()
       } else {
+        val isUpdateVerified = OfficialSourceVerifier.verifyExamUpdate(update).isVerified
         val (badgeContainer, badgeFg) =
           when (update.type) {
             ExamUpdateType.ADMIT_CARD -> UrgentRoseContainer to UrgentRose
@@ -464,6 +576,11 @@ fun ExamUpdateDetailScreen(
               }
 
               Spacer(modifier = Modifier.height(10.dp))
+              VerifiedSourceBadge(
+                officialDomain = update.officialDomain,
+                isVerified = isUpdateVerified,
+              )
+              Spacer(modifier = Modifier.height(8.dp))
               Text(
                 text = update.organization,
                 style = MaterialTheme.typography.labelLarge,
@@ -491,6 +608,11 @@ fun ExamUpdateDetailScreen(
               DetailKeyValueRow("EXAM DATE", update.examDateDisplay.ifBlank { "Not Announced" })
               Spacer(modifier = Modifier.height(8.dp))
               DetailKeyValueRow("STATUS", update.statusLabel)
+              Spacer(modifier = Modifier.height(8.dp))
+              DetailKeyValueRow(
+                "LAST VERIFIED",
+                update.lastVerifiedTimestamp.ifBlank { "Verified via Official Portal" },
+              )
             }
           }
         }
@@ -504,7 +626,12 @@ fun ExamUpdateDetailScreen(
             ) {
               if (!update.noticePdfUrl.isNullOrBlank()) {
                 OutlinedButton(
-                  onClick = { BrowserLauncher.openOfficialUrl(context, update.noticePdfUrl) },
+                  onClick = {
+                    if (isUpdateVerified) {
+                      BrowserLauncher.openOfficialUrl(context, update.noticePdfUrl)
+                    }
+                  },
+                  enabled = isUpdateVerified,
                   shape = RoundedCornerShape(24.dp),
                   border = BorderStroke(1.dp, SubtleBorder),
                   colors =
@@ -519,7 +646,12 @@ fun ExamUpdateDetailScreen(
               }
 
               Button(
-                onClick = { BrowserLauncher.openOfficialUrl(context, update.portalLoginUrl) },
+                onClick = {
+                  if (isUpdateVerified) {
+                    BrowserLauncher.openOfficialUrl(context, update.portalLoginUrl)
+                  }
+                },
+                enabled = isUpdateVerified,
                 shape = RoundedCornerShape(24.dp),
                 colors =
                   ButtonDefaults.buttonColors(
@@ -529,7 +661,7 @@ fun ExamUpdateDetailScreen(
                 modifier = Modifier.weight(1f).height(44.dp),
               ) {
                 Text(
-                  text = "Official Source Link ↗",
+                  text = if (isUpdateVerified) "Official Source Link ↗" else "Source Blocked",
                   style = MaterialTheme.typography.labelLarge,
                   fontWeight = FontWeight.Bold,
                   maxLines = 1,

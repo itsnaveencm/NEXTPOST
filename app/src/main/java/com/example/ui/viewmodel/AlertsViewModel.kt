@@ -1,5 +1,6 @@
 package com.example.ui.viewmodel
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
@@ -17,6 +18,7 @@ import com.example.data.model.JobAlert
 import com.example.data.model.JobAlertUiModel
 import com.example.data.model.JobSector
 import com.example.data.model.JobWindowFilter
+import com.example.data.model.NotificationPreferences
 import com.example.data.model.OfficialSourceVerifier
 import com.example.data.model.PersonalApplicationStatus
 import com.example.data.model.PrivateCompanyNode
@@ -26,6 +28,8 @@ import com.example.data.model.SavedJobRecord
 import com.example.data.model.StateQualificationTier
 import com.example.data.repository.FeedSyncMetadata
 import com.example.data.repository.JobRepository
+import com.example.notifications.FeedSyncNotificationEvaluator
+import com.example.notifications.NextPostWorkScheduler
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -59,6 +63,8 @@ data class GlobalSearchResults(
 
 data class AlertsUiState(
   val candidateProfile: CandidateProfile = CandidateProfile(),
+  val notificationPreferences: NotificationPreferences = NotificationPreferences(),
+  val notificationPromptShown: Boolean = true,
   val eligibleOnly: Boolean = true,
   val windowFilter: JobWindowFilter = JobWindowFilter.ACTIVE,
   val searchQuery: String = "",
@@ -181,8 +187,11 @@ data class AlertsUiState(
 class AlertsViewModel(
   private val repository: JobRepository,
   private val profileStore: CandidateProfileStore,
+  appContext: Context? = null,
   private val currentDateProvider: () -> String = { DateWindowUtils.currentLocalDateIso() },
 ) : ViewModel() {
+
+  private val applicationContext = appContext?.applicationContext
 
   private val eligibleOnly = MutableStateFlow(true)
   private val windowFilter = MutableStateFlow(JobWindowFilter.ACTIVE)
@@ -194,6 +203,7 @@ class AlertsViewModel(
   private val applyConfirmationJob = MutableStateFlow<JobAlert?>(null)
 
   init {
+    applicationContext?.let { NextPostWorkScheduler.schedulePeriodicFeedSync(it) }
     viewModelScope.launch {
       val savedEndpoint = profileStore.feedEndpointUrlFlow.first()
       refreshVerifiedFeed(savedEndpoint.ifBlank { null })
@@ -205,15 +215,32 @@ class AlertsViewModel(
       FilterBundle(onlyEligible, filter, query)
     }
 
-  private val metaFlow =
+  private val prefsMetaFlow =
     combine(
+      profileStore.notificationPrefsFlow,
+      profileStore.notificationPromptShownFlow,
       profileStore.savedNotificationIdsFlow,
       profileStore.savedOrgIdsFlow,
       profileStore.feedEndpointUrlFlow,
+    ) { notifPrefs, promptShown, savedNotices, savedOrgs, endpointUrl ->
+      PrefsMetaBundle(notifPrefs, promptShown, savedNotices, savedOrgs, endpointUrl)
+    }
+
+  private val metaFlow =
+    combine(
+      prefsMetaFlow,
       isSyncing,
       applyConfirmationJob,
-    ) { savedNotices, savedOrgs, endpointUrl, syncing, promptJob ->
-      MetaBundle(savedNotices, savedOrgs, endpointUrl, syncing, promptJob)
+    ) { prefsMeta, syncing, promptJob ->
+      MetaBundle(
+        notifPrefs = prefsMeta.notifPrefs,
+        promptShown = prefsMeta.promptShown,
+        savedNotices = prefsMeta.savedNotices,
+        savedOrgs = prefsMeta.savedOrgs,
+        endpointUrl = prefsMeta.endpointUrl,
+        syncing = syncing,
+        promptJob = promptJob,
+      )
     }
 
   private val recordsFlow =
@@ -338,6 +365,8 @@ class AlertsViewModel(
 
       AlertsUiState(
         candidateProfile = profile,
+        notificationPreferences = meta.notifPrefs,
+        notificationPromptShown = meta.promptShown,
         eligibleOnly = filters.onlyEligible,
         windowFilter = filters.windowFilter,
         searchQuery = filters.query,
@@ -382,6 +411,20 @@ class AlertsViewModel(
         val savedEndpoint = profileStore.feedEndpointUrlFlow.first()
         val target = endpointOverride?.trim() ?: savedEndpoint.ifBlank { null }
         repository.syncVerifiedFeed(target)
+
+        val context = applicationContext
+        if (context != null) {
+          val allJobs = repository.observeAllJobs().first()
+          val allUpdates = repository.observeExamUpdates().first()
+          FeedSyncNotificationEvaluator.evaluateAndNotify(
+            context = context,
+            profileStore = profileStore,
+            allVerifiedJobs = allJobs,
+            allVerifiedUpdates = allUpdates,
+            todayIso = currentDateProvider(),
+          )
+          resyncAllTrackedJobReminders()
+        }
       } finally {
         isSyncing.value = false
       }
@@ -396,6 +439,10 @@ class AlertsViewModel(
     }
   }
 
+  fun markNotificationPromptShown() {
+    viewModelScope.launch { profileStore.markNotificationPromptShown() }
+  }
+
   fun setWindowFilter(filter: JobWindowFilter) {
     windowFilter.value = filter
   }
@@ -408,16 +455,29 @@ class AlertsViewModel(
     searchQuery.value = query
   }
 
-  fun saveCandidateProfile(profile: CandidateProfile) {
-    viewModelScope.launch { profileStore.saveProfile(profile) }
+  fun saveCandidateProfile(
+    profile: CandidateProfile,
+    notificationPreferences: NotificationPreferences = uiState.value.notificationPreferences,
+  ) {
+    viewModelScope.launch {
+      profileStore.saveProfile(profile)
+      profileStore.saveNotificationPreferences(notificationPreferences)
+      resyncAllTrackedJobReminders()
+    }
   }
 
   fun toggleBookmark(jobId: String) {
-    viewModelScope.launch { repository.toggleBookmark(jobId) }
+    viewModelScope.launch {
+      repository.toggleBookmark(jobId)
+      syncRemindersForJob(jobId)
+    }
   }
 
   fun setDeadlineReminder(jobId: String, enabled: Boolean) {
-    viewModelScope.launch { repository.setDeadlineReminder(jobId, enabled) }
+    viewModelScope.launch {
+      repository.setDeadlineReminder(jobId, enabled)
+      syncRemindersForJob(jobId)
+    }
   }
 
   fun toggleSavedNotification(updateId: String) {
@@ -441,11 +501,15 @@ class AlertsViewModel(
         appliedDateDisplay = appliedDate,
         personalStatus = personalStatus,
       )
+      syncRemindersForJob(jobId)
     }
   }
 
   fun removeAppliedJob(jobId: String) {
-    viewModelScope.launch { repository.removeAppliedJob(jobId) }
+    viewModelScope.launch {
+      repository.removeAppliedJob(jobId)
+      syncRemindersForJob(jobId)
+    }
   }
 
   fun updateAppliedStage(jobId: String, stage: ApplicationLifecycleStage) {
@@ -453,11 +517,56 @@ class AlertsViewModel(
   }
 
   fun updatePersonalStatus(jobId: String, status: PersonalApplicationStatus) {
-    viewModelScope.launch { repository.updatePersonalStatus(jobId, status) }
+    viewModelScope.launch {
+      repository.updatePersonalStatus(jobId, status)
+      syncRemindersForJob(jobId)
+    }
   }
 
   fun updateRegistrationNumber(jobId: String, registrationNumber: String) {
     viewModelScope.launch { repository.updateRegistrationNumber(jobId, registrationNumber) }
+  }
+
+  private suspend fun syncRemindersForJob(jobId: String) {
+    val context = applicationContext ?: return
+    val job = repository.observeAllJobs().first().firstOrNull { it.id == jobId }
+    if (job == null) {
+      NextPostWorkScheduler.cancelDeadlineReminders(context, jobId)
+      return
+    }
+    val notifPrefs = profileStore.notificationPrefsFlow.first()
+    val saved = repository.observeSavedJobs(profileStore.profileFlow).first().firstOrNull { it.job.id == jobId }
+    val applied = repository.observeAppliedJobs().first().firstOrNull { it.job.id == jobId }
+
+    NextPostWorkScheduler.syncJobReminderState(
+      context = context,
+      job = job,
+      isSaved = saved != null,
+      reminderEnabled = saved?.reminderEnabled ?: true,
+      personalStatus = applied?.personalStatus,
+      deadlineRemindersEnabled = notifPrefs.deadlineRemindersEnabled,
+    )
+  }
+
+  private suspend fun resyncAllTrackedJobReminders() {
+    val context = applicationContext ?: return
+    val notifPrefs = profileStore.notificationPrefsFlow.first()
+    val allJobs = repository.observeAllJobs().first()
+    val savedById = repository.observeSavedJobs(profileStore.profileFlow).first().associateBy { it.job.id }
+    val appliedById = repository.observeAppliedJobs().first().associateBy { it.job.id }
+
+    allJobs.forEach { job ->
+      val saved = savedById[job.id]
+      val applied = appliedById[job.id]
+      NextPostWorkScheduler.syncJobReminderState(
+        context = context,
+        job = job,
+        isSaved = saved != null,
+        reminderEnabled = saved?.reminderEnabled ?: true,
+        personalStatus = applied?.personalStatus,
+        deadlineRemindersEnabled = notifPrefs.deadlineRemindersEnabled,
+      )
+    }
   }
 
   fun onExternalApplyLaunched(job: JobAlert) {
@@ -535,7 +644,17 @@ class AlertsViewModel(
     val syncMeta: FeedSyncMetadata,
   )
 
+  private data class PrefsMetaBundle(
+    val notifPrefs: NotificationPreferences,
+    val promptShown: Boolean,
+    val savedNotices: Set<String>,
+    val savedOrgs: Set<String>,
+    val endpointUrl: String,
+  )
+
   private data class MetaBundle(
+    val notifPrefs: NotificationPreferences,
+    val promptShown: Boolean,
     val savedNotices: Set<String>,
     val savedOrgs: Set<String>,
     val endpointUrl: String,
@@ -546,11 +665,12 @@ class AlertsViewModel(
   class Factory(
     private val repository: JobRepository,
     private val profileStore: CandidateProfileStore,
+    private val appContext: Context? = null,
   ) : ViewModelProvider.Factory {
     @Suppress("UNCHECKED_CAST")
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
       if (modelClass.isAssignableFrom(AlertsViewModel::class.java)) {
-        return AlertsViewModel(repository, profileStore) as T
+        return AlertsViewModel(repository, profileStore, appContext) as T
       }
       throw IllegalArgumentException("Unknown ViewModel class: ${modelClass.name}")
     }

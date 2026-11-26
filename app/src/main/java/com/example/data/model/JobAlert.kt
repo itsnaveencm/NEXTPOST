@@ -81,6 +81,40 @@ object DateWindowUtils {
     val formatter = SimpleDateFormat("dd MMM yyyy, HH:mm", Locale.US)
     return formatter.format(Date(syncMillis))
   }
+
+  fun relativeSyncAgeLabel(
+    syncMillis: Long,
+    nowMillis: Long = System.currentTimeMillis(),
+  ): String {
+    if (syncMillis <= 0L) return "NEVER"
+    val deltaMillis = (nowMillis - syncMillis).coerceAtLeast(0L)
+    val minutes = TimeUnit.MILLISECONDS.toMinutes(deltaMillis)
+    return when {
+      minutes < 2 -> "JUST NOW"
+      minutes < 60 -> "${minutes}M AGO"
+      minutes < 24 * 60 -> "${TimeUnit.MILLISECONDS.toHours(deltaMillis)}H AGO"
+      else -> "${TimeUnit.MILLISECONDS.toDays(deltaMillis)}D AGO"
+    }
+  }
+
+  fun deadlineEndOfDayMillis(isoDate: String): Long? {
+    val parts = isoDate.trim().split("-")
+    if (parts.size != 3) return null
+    val year = parts[0].toIntOrNull() ?: return null
+    val month = parts[1].toIntOrNull() ?: return null
+    val day = parts[2].toIntOrNull() ?: return null
+    return Calendar.getInstance()
+      .apply {
+        set(Calendar.YEAR, year)
+        set(Calendar.MONTH, month - 1)
+        set(Calendar.DAY_OF_MONTH, day)
+        set(Calendar.HOUR_OF_DAY, 23)
+        set(Calendar.MINUTE, 59)
+        set(Calendar.SECOND, 0)
+        set(Calendar.MILLISECOND, 0)
+      }
+      .timeInMillis
+  }
 }
 
 data class JobAlert(
@@ -109,6 +143,8 @@ data class JobAlert(
   val salaryPayScale: String = "As per Official Notification",
   val examDateDisplay: String = "Not Announced",
   val experienceRequired: String = "Freshers Eligible",
+  val generalObcFee: String? = null,
+  val scStFemaleFee: String? = null,
   val orgTag: String? = null,
   val subCategoryTag: String? = null,
 ) {
@@ -207,3 +243,13 @@ data class AppliedJobRecord(
   val portalUrl: String,
   val statusNote: String? = null,
 )
+
+object JobShareFormatter {
+  fun format(job: JobAlert): String =
+    buildString {
+      appendLine("${job.organization} — ${job.postTitle}")
+      appendLine("Qualification: ${job.qualificationTag} | Last Date: ${job.lastDateDisplay}")
+      appendLine("Official Portal: ${job.directApplyUrl}")
+      append("Shared via NextPost")
+    }
+}

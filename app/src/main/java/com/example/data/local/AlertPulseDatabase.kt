@@ -16,7 +16,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
       CachedExamUpdateEntity::class,
       FeedSyncMetadataEntity::class,
     ],
-  version = 4,
+  version = 5,
   exportSchema = false,
 )
 abstract class AlertPulseDatabase : RoomDatabase() {
@@ -134,6 +134,14 @@ abstract class AlertPulseDatabase : RoomDatabase() {
         }
       }
 
+    private val MIGRATION_4_5 =
+      object : Migration(4, 5) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+          db.execSQL("ALTER TABLE `cached_jobs` ADD COLUMN `generalObcFee` TEXT")
+          db.execSQL("ALTER TABLE `cached_jobs` ADD COLUMN `scStFemaleFee` TEXT")
+        }
+      }
+
     fun getInstance(context: Context): AlertPulseDatabase {
       return instance
         ?: synchronized(this) {
@@ -143,7 +151,7 @@ abstract class AlertPulseDatabase : RoomDatabase() {
                 AlertPulseDatabase::class.java,
                 "alert_pulse_db",
               )
-              .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+              .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
               .build()
               .also { instance = it }
         }

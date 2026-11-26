@@ -1,5 +1,9 @@
 package com.example.ui.screens
 
+import android.Manifest
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -40,6 +44,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.minimumInteractiveComponentSize
 import androidx.compose.runtime.Composable
@@ -51,6 +57,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -59,7 +66,9 @@ import com.example.R
 import com.example.data.model.AcademicStream
 import com.example.data.model.CandidateProfile
 import com.example.data.model.IndianStatesCatalog
+import com.example.data.model.NotificationPreferences
 import com.example.data.model.QualificationLevel
+import com.example.notifications.NextPostNotificationHelper
 import com.example.ui.components.StadiumPill
 import com.example.ui.theme.AlertPulseTypography
 import com.example.ui.theme.AmoledBlack
@@ -73,21 +82,46 @@ import com.example.ui.theme.SecondaryText
 import com.example.ui.theme.SoftLavender
 import com.example.ui.theme.SubtleBorder
 import com.example.ui.theme.SubtleBorderHighlight
+import com.example.ui.theme.TitaniumSilverMuted
 import kotlin.math.roundToInt
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun CandidateProfileScreen(
   currentProfile: CandidateProfile,
-  onSavePreferences: (CandidateProfile) -> Unit,
+  currentNotificationPrefs: NotificationPreferences,
+  onSavePreferences: (CandidateProfile, NotificationPreferences) -> Unit,
   onNavigateBack: () -> Unit,
   modifier: Modifier = Modifier,
 ) {
+  val context = LocalContext.current
   var selectedQual by remember(currentProfile) { mutableStateOf(currentProfile.qualification) }
   var selectedStream by remember(currentProfile) { mutableStateOf(currentProfile.stream) }
   var selectedAge by remember(currentProfile) { mutableIntStateOf(currentProfile.age) }
   var selectedStateCode by remember(currentProfile) { mutableStateOf(currentProfile.homeStateCode) }
   var isStatePickerExpanded by remember { mutableStateOf(false) }
+
+  var notifEligibleJobs by remember(currentNotificationPrefs) {
+    mutableStateOf(currentNotificationPrefs.newEligibleJobsEnabled)
+  }
+  var notifDeadlineReminders by remember(currentNotificationPrefs) {
+    mutableStateOf(currentNotificationPrefs.deadlineRemindersEnabled)
+  }
+  var notifExamUpdates by remember(currentNotificationPrefs) {
+    mutableStateOf(currentNotificationPrefs.examUpdatesEnabled)
+  }
+
+  val permissionLauncher =
+    rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { _ -> }
+
+  val ensureNotificationPermission: () -> Unit = {
+    if (
+      Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+        !NextPostNotificationHelper.canPostNotifications(context)
+    ) {
+      permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+    }
+  }
 
   val selectedStateObj = IndianStatesCatalog.findByCode(selectedStateCode)
 
@@ -344,6 +378,57 @@ fun CandidateProfileScreen(
             }
           }
         }
+
+        Spacer(modifier = Modifier.height(22.dp))
+
+        Text(
+          text = "NOTIFICATIONS & DEADLINE ALERTS",
+          style = AlertPulseTypography.BadgeMono,
+          color = SoftLavender,
+        )
+        Spacer(modifier = Modifier.height(10.dp))
+
+        Surface(
+          color = ElevatedCardSurface,
+          shape = RoundedCornerShape(18.dp),
+          border = BorderStroke(1.dp, SubtleBorder),
+          modifier = Modifier.fillMaxWidth().testTag("notification_preferences_card"),
+        ) {
+          Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+            NotificationPreferenceRow(
+              title = "New Eligible Job Alerts",
+              subtitle = "Notify when new verified jobs match your profile & state",
+              checked = notifEligibleJobs,
+              onCheckedChange = { checked ->
+                notifEligibleJobs = checked
+                if (checked) ensureNotificationPermission()
+              },
+              testTag = "switch_notif_eligible_jobs",
+            )
+            HorizontalDivider(color = SubtleBorder, thickness = 1.dp)
+            NotificationPreferenceRow(
+              title = "Closing Deadline Reminders (48h & 6h)",
+              subtitle = "Auto-schedule alerts for Saved & In-Progress jobs",
+              checked = notifDeadlineReminders,
+              onCheckedChange = { checked ->
+                notifDeadlineReminders = checked
+                if (checked) ensureNotificationPermission()
+              },
+              testTag = "switch_notif_deadlines",
+            )
+            HorizontalDivider(color = SubtleBorder, thickness = 1.dp)
+            NotificationPreferenceRow(
+              title = "Exam Updates (Admit Cards & Results)",
+              subtitle = "Official admit card, city slip & result alerts",
+              checked = notifExamUpdates,
+              onCheckedChange = { checked ->
+                notifExamUpdates = checked
+                if (checked) ensureNotificationPermission()
+              },
+              testTag = "switch_notif_exam_updates",
+            )
+          }
+        }
       }
 
       Surface(color = ElevatedBarSurface, modifier = Modifier.fillMaxWidth()) {
@@ -358,7 +443,12 @@ fun CandidateProfileScreen(
                   age = selectedAge,
                   homeStateCode = selectedStateCode,
                   hasCompletedOnboarding = true,
-                )
+                ),
+                NotificationPreferences(
+                  newEligibleJobsEnabled = notifEligibleJobs,
+                  deadlineRemindersEnabled = notifDeadlineReminders,
+                  examUpdatesEnabled = notifExamUpdates,
+                ),
               )
             },
             shape = RoundedCornerShape(24.dp),
@@ -382,5 +472,47 @@ fun CandidateProfileScreen(
         }
       }
     }
+  }
+}
+
+@Composable
+private fun NotificationPreferenceRow(
+  title: String,
+  subtitle: String,
+  checked: Boolean,
+  onCheckedChange: (Boolean) -> Unit,
+  testTag: String,
+) {
+  Row(
+    modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp),
+    horizontalArrangement = Arrangement.SpaceBetween,
+    verticalAlignment = Alignment.CenterVertically,
+  ) {
+    Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
+      Text(
+        text = title,
+        style = MaterialTheme.typography.titleSmall,
+        color = PrimaryText,
+      )
+      Spacer(modifier = Modifier.height(2.dp))
+      Text(
+        text = subtitle,
+        style = MaterialTheme.typography.bodySmall,
+        color = SecondaryText,
+      )
+    }
+    Switch(
+      checked = checked,
+      onCheckedChange = onCheckedChange,
+      colors =
+        SwitchDefaults.colors(
+          checkedThumbColor = AmoledBlack,
+          checkedTrackColor = SoftLavender,
+          uncheckedThumbColor = TitaniumSilverMuted,
+          uncheckedTrackColor = ElevatedCardSurfaceAlt,
+          uncheckedBorderColor = SubtleBorder,
+        ),
+      modifier = Modifier.testTag(testTag),
+    )
   }
 }

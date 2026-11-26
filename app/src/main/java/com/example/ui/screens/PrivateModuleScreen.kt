@@ -42,6 +42,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.data.model.JobAlertUiModel
+import com.example.data.model.JobWindowFilter
 import com.example.data.model.RecruitmentHierarchy
 import com.example.ui.components.BrowserLauncher
 import com.example.ui.components.EligibilityStripCard
@@ -50,6 +51,8 @@ import com.example.ui.components.GlassyDirectoryRowCard
 import com.example.ui.components.GlassySectionHeader
 import com.example.ui.components.GlassyTopBarWithBreadcrumb
 import com.example.ui.components.JobAlertCard
+import com.example.ui.components.NextPostPullToRefreshBox
+import com.example.ui.components.WindowFilterStrip
 import com.example.ui.components.ZeroAlertsBentoCard
 import com.example.ui.theme.AlertPulseTypography
 import com.example.ui.theme.AmoledBlack
@@ -206,17 +209,19 @@ fun CompanyDetailScreen(
   onNavigateBack: () -> Unit,
   onToggleSaveCompany: (String) -> Unit,
   onToggleEligibleOnly: () -> Unit,
+  onSelectWindowFilter: (JobWindowFilter) -> Unit,
   onEditProfileClick: () -> Unit,
   onToggleBookmark: (String) -> Unit,
   onMarkAppliedClick: (JobAlertUiModel) -> Unit,
   onApplyNowLaunched: (JobAlertUiModel) -> Unit,
   onOpenJobDetail: (String, String) -> Unit,
+  onRefreshFeedClick: () -> Unit = {},
   modifier: Modifier = Modifier,
 ) {
   val context = LocalContext.current
   val company = RecruitmentHierarchy.findPrivateCompany(companyId)
   val companyTitle = company?.name ?: companyId
-  val openJobs = uiState.openJobsForCompany(companyId)
+  val openJobs = uiState.jobsForCompany(companyId)
   val isSaved = companyId in uiState.savedOrgIds
 
   Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
@@ -239,11 +244,16 @@ fun CompanyDetailScreen(
         },
       )
 
-      LazyColumn(
-        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-        modifier = Modifier.fillMaxSize().testTag("company_detail_list"),
+      NextPostPullToRefreshBox(
+        isRefreshing = uiState.isSyncing,
+        onRefresh = onRefreshFeedClick,
+        modifier = Modifier.weight(1f).fillMaxWidth().testTag("company_pull_to_refresh"),
       ) {
+        LazyColumn(
+          contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
+          verticalArrangement = Arrangement.spacedBy(12.dp),
+          modifier = Modifier.fillMaxSize().testTag("company_detail_list"),
+        ) {
         if (company != null) {
           item(key = "company_summary") {
             GlassyCard(modifier = Modifier.fillMaxWidth()) {
@@ -309,6 +319,13 @@ fun CompanyDetailScreen(
           }
         }
 
+        item(key = "company_window_filter") {
+          WindowFilterStrip(
+            selected = uiState.windowFilter,
+            onSelect = onSelectWindowFilter,
+          )
+        }
+
         item(key = "company_eligibility") {
           EligibilityStripCard(
             eligibleOnly = uiState.eligibleOnly,
@@ -322,6 +339,12 @@ fun CompanyDetailScreen(
         if (openJobs.isEmpty()) {
           item(key = "company_empty") {
             ZeroAlertsBentoCard(
+              headline =
+                if (uiState.windowFilter == JobWindowFilter.UPCOMING) {
+                  "NO VERIFIED UPCOMING NOTIFICATIONS"
+                } else {
+                  "NO VERIFIED ACTIVE OPENINGS"
+                },
               onEditProfileClick = onEditProfileClick,
               secondaryActionLabel = if (uiState.eligibleOnly) "Show All Open" else null,
               onSecondaryActionClick = if (uiState.eligibleOnly) onToggleEligibleOnly else null,
@@ -343,6 +366,7 @@ fun CompanyDetailScreen(
               },
             )
           }
+        }
         }
       }
     }

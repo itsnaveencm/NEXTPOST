@@ -7,6 +7,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
@@ -33,6 +34,7 @@ import androidx.compose.material.icons.rounded.VerifiedUser
 import androidx.compose.material.icons.rounded.WarningAmber
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -41,6 +43,9 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.minimumInteractiveComponentSize
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults
+import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -349,6 +354,33 @@ fun WindowFilterStrip(
   }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun NextPostPullToRefreshBox(
+  isRefreshing: Boolean,
+  onRefresh: () -> Unit,
+  modifier: Modifier = Modifier,
+  content: @Composable BoxScope.() -> Unit,
+) {
+  val pullState = rememberPullToRefreshState()
+  PullToRefreshBox(
+    isRefreshing = isRefreshing,
+    onRefresh = onRefresh,
+    state = pullState,
+    indicator = {
+      PullToRefreshDefaults.Indicator(
+        state = pullState,
+        isRefreshing = isRefreshing,
+        containerColor = ElevatedBarSurface,
+        color = SoftLavender,
+        modifier = Modifier.align(Alignment.TopCenter),
+      )
+    },
+    modifier = modifier,
+    content = content,
+  )
+}
+
 @Composable
 fun FeedSyncStatusBanner(
   syncMetadata: FeedSyncMetadata,
@@ -357,11 +389,24 @@ fun FeedSyncStatusBanner(
   onConfigureClick: () -> Unit,
   modifier: Modifier = Modifier,
 ) {
+  val ageLabel = DateWindowUtils.relativeSyncAgeLabel(syncMetadata.lastSyncedAtMillis)
   val statusLabel =
-    when (syncMetadata.syncStatus) {
-      "VERIFIED_SYNC_OK" -> "SYNCED • ${DateWindowUtils.formatSyncTimestamp(syncMetadata.lastSyncedAtMillis)}"
-      "SYNC_ERROR" -> "SYNC RETRY • OFFICIAL PORTALS"
-      else -> "CONNECTED TO OFFICIAL PORTALS"
+    when {
+      isSyncing -> "● SYNCING OFFICIAL PORTALS..."
+      syncMetadata.syncStatus == "VERIFIED_SYNC_OK" ->
+        "● SYNCED $ageLabel • OFFICIAL PORTALS VERIFIED"
+      syncMetadata.syncStatus == "SYNC_ERROR" && syncMetadata.lastSyncedAtMillis > 0L ->
+        "● OFFLINE CACHE • LAST SYNCED $ageLabel"
+      syncMetadata.syncStatus == "SYNC_ERROR" ->
+        "● OFFLINE • AWAITING OFFICIAL PORTAL SYNC"
+      else -> "● OFFICIAL PORTALS VERIFIED • TAP TO CONNECT FEED"
+    }
+
+  val statusColor =
+    when {
+      isSyncing -> SkyAccent
+      syncMetadata.syncStatus == "SYNC_ERROR" -> UrgentRose
+      else -> EmeraldSoft
     }
 
   GlassyCard(
@@ -377,7 +422,7 @@ fun FeedSyncStatusBanner(
         Text(
           text = statusLabel,
           style = AlertPulseTypography.BadgeMono,
-          color = if (syncMetadata.syncStatus == "SYNC_ERROR") StatusRed else EmeraldSoft,
+          color = statusColor,
           maxLines = 1,
           overflow = TextOverflow.Ellipsis,
         )
@@ -385,7 +430,7 @@ fun FeedSyncStatusBanner(
         Text(
           text =
             if (syncMetadata.endpointUrl.isBlank()) {
-              "Live API not configured • Zero dummy records policy active"
+              "Pull down to refresh • Zero dummy records policy active"
             } else {
               "${syncMetadata.verifiedJobsCount} verified jobs • ${syncMetadata.blockedRecordsCount} unverified blocked"
             },

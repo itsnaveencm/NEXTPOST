@@ -8,6 +8,8 @@ import android.widget.Toast
 import androidx.browser.customtabs.CustomTabColorSchemeParams
 import androidx.browser.customtabs.CustomTabsIntent
 import androidx.compose.ui.graphics.toArgb
+import com.example.data.model.JobAlert
+import com.example.data.model.JobShareFormatter
 import com.example.ui.theme.AmoledBlack
 
 object BrowserLauncher {
@@ -39,6 +41,25 @@ object BrowserLauncher {
       } catch (_: ActivityNotFoundException) {
         Toast.makeText(context, "No browser app found to open $url", Toast.LENGTH_SHORT).show()
       }
+    }
+  }
+
+  fun shareJobSummary(context: Context, job: JobAlert) {
+    val shareText = JobShareFormatter.format(job)
+    val sendIntent =
+      Intent(Intent.ACTION_SEND).apply {
+        type = "text/plain"
+        putExtra(Intent.EXTRA_SUBJECT, "${job.organization} — ${job.postTitle}")
+        putExtra(Intent.EXTRA_TEXT, shareText)
+      }
+    val chooser =
+      Intent.createChooser(sendIntent, "Share opportunity").apply {
+        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+      }
+    try {
+      context.startActivity(chooser)
+    } catch (_: ActivityNotFoundException) {
+      Toast.makeText(context, "No sharing app available", Toast.LENGTH_SHORT).show()
     }
   }
 }

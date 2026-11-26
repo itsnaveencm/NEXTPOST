@@ -159,14 +159,15 @@ class LiveVerifiedJobRepository(
       )
     } catch (e: Exception) {
       val message = e.localizedMessage ?: "Official feed sync failed"
+      val previousMeta = cachedFeedDao.getSyncMetadataSync()
       cachedFeedDao.upsertSyncMetadata(
         FeedSyncMetadataEntity(
           endpointUrl = targetUrl,
-          lastSyncedAtMillis = System.currentTimeMillis(),
+          lastSyncedAtMillis = previousMeta?.lastSyncedAtMillis ?: 0L,
           syncStatus = "SYNC_ERROR",
-          verifiedJobsCount = 0,
-          verifiedUpdatesCount = 0,
-          blockedRecordsCount = 0,
+          verifiedJobsCount = previousMeta?.verifiedJobsCount ?: 0,
+          verifiedUpdatesCount = previousMeta?.verifiedUpdatesCount ?: 0,
+          blockedRecordsCount = previousMeta?.blockedRecordsCount ?: 0,
         )
       )
       FeedSyncResult.Error(message)

@@ -38,6 +38,12 @@ data class CandidateProfile(
   fun summaryLabel(): String = "${qualification.shortLabel} (${stream.shortLabel}), ${age}y"
 }
 
+data class NotificationPreferences(
+  val newEligibleJobsEnabled: Boolean = true,
+  val deadlineRemindersEnabled: Boolean = true,
+  val examUpdatesEnabled: Boolean = true,
+)
+
 object EligibilityEngine {
   fun isEligible(job: JobAlert, profile: CandidateProfile): Boolean {
     if (profile.age !in job.minAge..job.maxAge) return false
@@ -62,5 +68,15 @@ object EligibilityEngine {
       AcademicStream.ALL_GENERAL in job.allowedStreams ||
         profile.stream in job.allowedStreams
     return streamMatches
+  }
+
+  fun isEligibleForNotification(job: JobAlert, profile: CandidateProfile): Boolean {
+    if (!isEligible(job, profile)) return false
+    val isStateSpecificSector =
+      job.sector == JobSector.STATE_GOVT || job.sector == JobSector.STATE_PRIVATE
+    if (isStateSpecificSector && !job.stateCode.isNullOrBlank()) {
+      return job.stateCode.equals(profile.homeStateCode, ignoreCase = true)
+    }
+    return true
   }
 }
